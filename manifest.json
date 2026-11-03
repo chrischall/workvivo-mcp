@@ -117,6 +117,22 @@
       "description": "List the people on your team"
     },
     {
+      "name": "workvivo_list_pages",
+      "description": "List a space's (or global collection's) content pages as a tree"
+    },
+    {
+      "name": "workvivo_get_page",
+      "description": "Read one content page as Markdown, with an index of the pages and documents it links to"
+    },
+    {
+      "name": "workvivo_get_document",
+      "description": "Read a linked document (PDF, Word, text) as Markdown via your signed-in browser"
+    },
+    {
+      "name": "workvivo_digest_space",
+      "description": "Digest a whole space in one Markdown document: every page, linked documents, events, recent posts"
+    },
+    {
       "name": "workvivo_list_spaces",
       "description": "List your spaces, all spaces, trending spaces, or search spaces by name"
     },

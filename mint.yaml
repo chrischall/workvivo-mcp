@@ -46,4 +46,7 @@ egress:
   # mode). WORKVIVO_HOST only selects WHICH tab the extension routes to. The
   # only socket the process opens is the loopback concentrator the extension
   # connects to; the SAML sign-in hosts are followed by the browser.
+  # Documents are downloaded by the BROWSER (chrome.downloads) and read from
+  # its download folder, so workvivo_get_document only works where the
+  # browser and this process share a disk — not on a hosted runner.
   allow: []

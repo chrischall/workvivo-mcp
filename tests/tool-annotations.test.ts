@@ -2,11 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { harnessFor } from './helpers.js';
 
 /**
- * Fleet annotation meta-test, read off the wire (tools/list). workvivo-mcp is
- * read-only: every tool must say so explicitly, none may claim to be
- * destructive, and all reach Workvivo (open world). A future write must be
- * added to the "writes" assertion on purpose, with a confirmWrite gate and an
- * explicit boolean destructiveHint.
+ * Fleet annotation meta-test, read off the wire (tools/list). workvivo-mcp
+ * never changes anything in Workvivo. Two tools are not read-only only because
+ * they make the BROWSER save a linked document on this machine
+ * (workvivo_get_document, and workvivo_digest_space with include_documents) —
+ * additive and never overwriting, so destructiveHint must be an explicit
+ * false. Any other non-read must be added to that list on purpose (a write to
+ * Workvivo would also need a confirmWrite gate).
  */
 interface Ann {
   readOnlyHint?: unknown;
@@ -29,7 +31,7 @@ afterAll(async () => {
 
 describe('tool annotations', () => {
   it('covers the full surface (guards against a registrar being dropped)', () => {
-    expect(Object.keys(ann)).toHaveLength(19);
+    expect(Object.keys(ann)).toHaveLength(23);
   });
 
   it('sets an explicit boolean readOnlyHint on every tool', () => {
@@ -51,7 +53,9 @@ describe('tool annotations', () => {
     expect(Object.entries(ann).filter(([, a]) => a?.openWorldHint !== true).map(([n]) => n)).toEqual([]);
   });
 
-  it('has no writes', () => {
-    expect(Object.entries(ann).filter(([, a]) => a?.readOnlyHint !== true).map(([n]) => n)).toEqual([]);
+  it('has no writes — only the two local-download tools are non-reads, and both are additive', () => {
+    const nonReads = Object.entries(ann).filter(([, a]) => a?.readOnlyHint !== true);
+    expect(nonReads.map(([n]) => n).sort()).toEqual(['workvivo_digest_space', 'workvivo_get_document']);
+    expect(nonReads.map(([, a]) => a?.destructiveHint)).toEqual([false, false]);
   });
 });

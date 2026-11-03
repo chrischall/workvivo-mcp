@@ -22,7 +22,29 @@ import {
   parseJsonBody,
   truncateErrorMessage,
 } from '@chrischall/mcp-utils';
-import type { BridgeProbeResult, BridgeStatus, FetchResult, WorkvivoTransport } from './transport.js';
+import { stat } from 'node:fs/promises';
+import type { BridgeProbeResult, BridgeStatus, DownloadResult, FetchResult, WorkvivoTransport } from './transport.js';
+
+/** Where a page lives: a space, or a global page collection ("page group"). */
+export type PageScope = { space_id: number } | { page_group_id: number };
+
+/** A downloadable Workvivo document: `/document/link/<id>` or `/file/<id>`. */
+export type DocumentRef = { kind: 'document' | 'file'; id: number };
+
+type Rec = Record<string, unknown>;
+
+/** Depth-first search of a pages-v2 tree for a page id. */
+function findInTree(nodes: unknown, id: number): Rec | undefined {
+  if (!Array.isArray(nodes)) return undefined;
+  for (const n of nodes) {
+    if (typeof n !== 'object' || n === null) continue;
+    const r = n as Rec;
+    if (r.id === id) return r;
+    const hit = findInTree(r.children, id);
+    if (hit) return hit;
+  }
+  return undefined;
+}
 
 const SERVICE = 'Workvivo';
 
@@ -116,6 +138,8 @@ export class WorkvivoClient {
   private readonly configError: WorkvivoConfigError | undefined;
   private token: string | undefined;
   private tokenInFlight: Promise<string> | undefined;
+  /** Documents downloaded by this process, so a re-read does not re-download. */
+  private readonly downloads = new Map<string, DownloadResult>();
 
   constructor(opts: WorkvivoClientOptions) {
     this.transport = opts.transport;
@@ -160,6 +184,65 @@ export class WorkvivoClient {
   /** POST JSON to `/api/<path>` — used only for read-only endpoints (search). */
   async postJson<T = unknown>(path: string, body: unknown): Promise<T> {
     return this.call<T>('POST', path, JSON.stringify(body));
+  }
+
+  /** `https://<host>` — the base every relative Workvivo link resolves against. */
+  get origin(): string {
+    return `https://${this.host}`;
+  }
+
+  /** The page tree of a space or a global page collection (`pages-v2`). */
+  async getPageTree(scope: PageScope): Promise<Rec> {
+    const path = 'space_id' in scope ? `spaces/${scope.space_id}/pages-v2` : `pages-v2/${scope.page_group_id}`;
+    return (await this.get<Rec>(path, { include_content: 'false' })) ?? {};
+  }
+
+  /**
+   * One page with its content. `page` is the page's slug (what Workvivo URLs
+   * carry) or its numeric id; an id that is not also a slug is resolved
+   * through the tree. Omit it for the scope's landing page.
+   */
+  async getPage(scope: PageScope, page?: string | number): Promise<Rec> {
+    const base = 'space_id' in scope ? `spaces/${scope.space_id}/pages` : `pages/${scope.page_group_id}`;
+    const fetchSlug = (slug: string) =>
+      this.get<Rec>(slug ? `${base}/${encodeURIComponent(slug)}` : base, { include_content: 'true' });
+    if (page === undefined || page === '') return (await fetchSlug('')) ?? {};
+    const key = String(page).trim();
+    try {
+      return (await fetchSlug(key)) ?? {};
+    } catch (e) {
+      // A numeric page id is not always its slug: look the id up in the tree.
+      if (!(e instanceof WorkvivoApiError && e.status === 404 && /^\d+$/.test(key))) throw e;
+      const tree = await this.getPageTree(scope);
+      const node = findInTree(tree.pages, Number(key));
+      const slug = typeof node?.slug === 'string' ? node.slug : undefined;
+      if (!slug || slug === key) throw e;
+      return (await fetchSlug(slug)) ?? {};
+    }
+  }
+
+  /**
+   * Download a linked document through the browser (the link 302s to a signed
+   * file host a page fetch cannot follow). The file is saved by the browser on
+   * this machine; repeat calls in one process reuse it while it still exists.
+   */
+  async downloadDocument(ref: DocumentRef): Promise<DownloadResult> {
+    const url = `${this.origin}/${ref.kind === 'document' ? 'document/link' : 'file'}/${ref.id}`;
+    const cached = this.downloads.get(url);
+    if (cached) {
+      try {
+        if ((await stat(cached.path)).isFile()) return cached;
+      } catch {
+        // deleted since — download again
+      }
+    }
+    const res = await this.transport.download({ url, timeoutMs: 120_000 });
+    // A signed-out browser downloads the sign-in page instead of the file.
+    if ((res.mime ?? '').startsWith('text/html') && res.finalUrl && this.isSignInBounce({ status: 200, body: '', url: res.finalUrl })) {
+      throw new WorkvivoSessionError(this.host, 'the document link redirected to sign-in');
+    }
+    this.downloads.set(url, res);
+    return res;
   }
 
   private isSignInBounce(res: FetchResult): boolean {

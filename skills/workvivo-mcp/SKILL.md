@@ -28,6 +28,13 @@ RSVPs.
   - Comments on any of update, article, event or kudos → `workvivo_get_comments`.
 - **People** → `workvivo_search_people`, `workvivo_get_person`,
   `workvivo_get_my_team`, `workvivo_get_me`.
+- **Read a whole space** → `workvivo_digest_space space_id=<id>`: every page as
+  Markdown plus an index of the documents they link (add
+  `include_documents: true` to pull the documents' text too). For one page:
+  `workvivo_list_pages` then `workvivo_get_page` (slug or id, from a
+  `spaces/<id>/pages/<slug>` or `pages/<group>/<slug>` URL).
+- **A linked document** (`/document/link/<id>`) → `workvivo_get_document
+  document_id=<id>` — PDFs/Word as Markdown; long ones page with `offset`.
 - **Spaces** → `workvivo_list_spaces` (`scope` mine/all/trending, or `query`), then
   pass `space_id` to `workvivo_get_feed`, `workvivo_list_news` or
   `workvivo_list_events`.

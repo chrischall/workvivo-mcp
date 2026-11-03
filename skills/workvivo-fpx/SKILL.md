@@ -1,6 +1,6 @@
 ---
 name: workvivo-fpx
-description: Read your organization's Workvivo (Zoom Workvivo employee-experience platform, <org>.workvivo.us/.com/.io) from a shell — the home feed, company news articles, posts and shoutouts with their comments, spaces and their feeds/news/events, upcoming events, the people directory and profiles, your team, notifications, and full-text federated search — through your signed-in Workvivo browser tab with the fpx CLI. Read-only. Use when asked about Workvivo, the company intranet feed, internal news, a Workvivo space, colleagues' profiles, or what's happening at work.
+description: Read your organization's Workvivo (Zoom Workvivo employee-experience platform, <org>.workvivo.us/.com/.io) from a shell — the home feed, company news articles, posts and shoutouts with their comments, spaces and their feeds/news/events/content pages, linked documents, upcoming events, the people directory and profiles, your team, notifications, and full-text federated search — through your signed-in Workvivo browser tab with the fpx CLI. Read-only. Use when asked about Workvivo, the company intranet feed, internal news, a Workvivo space, colleagues' profiles, or what's happening at work.
 ---
 
 # Workvivo via fpx
