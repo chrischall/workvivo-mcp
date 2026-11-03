@@ -39,7 +39,7 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
           'and return its text as Markdown: PDFs page by page, Word (.docx) with headings/lists/tables, plain text ' +
           'and HTML. Other types (PowerPoint, Excel, images) return the saved file path instead. The browser ' +
           'downloads the file through your signed-in session into its download folder on this machine (repeat ' +
-          'reads reuse it). Long documents page with `offset`/`max_chars`. Does not change anything in Workvivo.',
+          'reads reuse it). Long documents page with `offset`/`max_chars`. Edits nothing in Workvivo, though like opening it in the browser, Workvivo may record the view.',
       ),
       annotations: toolAnnotations({
         title: 'Read a Workvivo document',

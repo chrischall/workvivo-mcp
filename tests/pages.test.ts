@@ -209,7 +209,14 @@ describe('workvivo_digest_space', () => {
     '/api/spaces/30/pages/annual-cycle': { page: fx.tinymcePage },
     '/api/spaces/30/pages/9004': { page: fx.lexicalPage },
     '/api/spaces/30/pages/draft-notes': { status: 500, body: '{"message":"Server Error"}' },
-    '/api/spaces/30/documents': { data: [{ id: 77, title: 'Policy Pack' }], next_page_url: null },
+    '/api/spaces/30/documents': {
+      data: [
+        { id: 77, title: 'Policy Pack' },
+        { id: 78, title: 'Handbook', url: 'https://files.example.com/h.pdf?Expires=1&Signature=SECRETSIG' },
+        { id: 79, title: 'Portal', url: 'https://example.com/portal' },
+      ],
+      next_page_url: null,
+    },
     '/api/spaces/30/links': { title: 'Useful Links', body: '<p><a href="https://example.com/hr">HR portal</a></p>' },
     '/api/spaces/30/events': { data: [fx.event], next_page_url: null },
     '/api/spaces/30/feed': fx.feed,
@@ -230,7 +237,7 @@ describe('workvivo_digest_space', () => {
     expect(t).toContain('| 501 | Cycle Guide — Resources | Annual Cycle |');
     expect(t).toContain('| 503 | ES — Goal Template (ES) | Goals |');
     expect(t).toContain('- Goals — Resources — space_id=30 page="9004"');
-    expect(t).toContain('## Document library\n\n- Policy Pack (id 77)');
+    expect(t).toContain('## Document library\n\n- Policy Pack (id 77)\n- Handbook (id 78)\n- Portal (id 79) — https://example.com/portal');
     expect(t).toContain('## Useful Links\n\n[HR portal](https://example.com/hr)');
     expect(t).toContain('**Town Hall** — 2026-11-11T18:00:00Z · Virtual (event_id 8001)');
     expect(t).toContain('## Recent posts (2)');

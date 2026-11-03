@@ -3,7 +3,7 @@ import { mapWithConcurrency, messageOf, toolAnnotations } from '@chrischall/mcp-
 import { z } from 'zod';
 import type { WorkvivoClient } from '../client.js';
 import { extractDocument } from '../documents.js';
-import { extractLinks, htmlToMarkdown, rebaseHeadings, type ExtractedLink } from '../markdown.js';
+import { extractLinks, htmlToMarkdown, isSignedUrl, rebaseHeadings, type ExtractedLink } from '../markdown.js';
 import { event, feedEntry, flattenTree, pageMarkdown, pageTree, space, type PageNode } from '../project.js';
 import { markdownResult, untrustedDescription } from '../view.js';
 import { idArg } from './common.js';
@@ -32,7 +32,7 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
           'point to (with the document_id for workvivo_get_document), the space\'s document library and useful ' +
           'links, upcoming events, and its most recent posts. Set `include_documents: true` to also download and ' +
           'extract the text of the linked documents (capped by `max_documents`/`max_document_chars`; the browser ' +
-          'saves them in its download folder on this machine). Does not change anything in Workvivo.',
+          'saves them in its download folder on this machine). Edits nothing in Workvivo (opening documents may be recorded as views, as in the browser).',
       ),
       annotations: toolAnnotations({
         title: 'Digest a whole Workvivo space',
@@ -156,7 +156,9 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
             items
               .map((d) => {
                 const name = String(d.title ?? d.name ?? d.label ?? d.id);
-                return `- ${name} (id ${String(d.id)})${typeof d.url === 'string' ? ` — ${d.url}` : ''}`;
+                // A library item's url may be a signed file link: never emit one.
+                const url = typeof d.url === 'string' && !isSignedUrl(d.url) ? d.url : undefined;
+                return `- ${name} (id ${String(d.id)})${url ? ` — ${url}` : ''}`;
               })
               .join('\n'),
           );
