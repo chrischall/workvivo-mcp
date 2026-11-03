@@ -84,10 +84,18 @@ Pages are written in one of two editors:
   horizontalrule.
 
 **Documents** are linked as `/document/link/<id>` (and `/file/<id>`). These are
-server routes, not `/api`, and they 302 to a signed file host
-(`attachments.workvivo.us`), so a page `fetch` fails with "Failed to fetch". The
-bridge's `download` verb (`chrome.downloads`) follows the redirect and saves the
-file. Note that `documents/<id>` in the API is a *different* id space: a link id
+server routes, not `/api`, and they 302 to a signed URL on the file host
+(`attachments.workvivo.us`):
+`…/uploads/<org>/<user>/<hash>.pdf?response-content-disposition=filename%3D%22<name>%22&Expires=<~15 s>&Signature=…&Key-Pair-Id=…`.
+A page `fetch` fails ("Failed to fetch", because the file host sends no CORS
+headers). Two ways through:
+
+- **capture_redirect**, used first: the browser follows the link and the bridge
+  reports the redirect target. That signed URL works from the server with no
+  cookies, and a `HEAD` gives `Content-Length`, `Content-Type` and
+  `Content-Disposition`. It has to be used within seconds.
+- **download**, the fallback: `chrome.downloads` follows the redirect and saves the
+  file in the browser's download folder. Note that `documents/<id>` in the API is a *different* id space: a link id
 there answers "No query results". The `download` capability has to be in the
 pairing, and the extension refuses (rather than re-prompting) a pairing approved
 without it.

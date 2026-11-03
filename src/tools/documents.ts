@@ -38,8 +38,9 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
           '`document_id` that workvivo_get_page and workvivo_digest_space list) or a `/file/<id>` attachment — ' +
           'and return its text as Markdown: PDFs page by page, Word (.docx) with headings/lists/tables, plain text ' +
           'and HTML. Other types (PowerPoint, Excel, images) return the saved file path instead. The browser ' +
-          'downloads the file through your signed-in session into its download folder on this machine (repeat ' +
-          'reads reuse it). Long documents page with `offset`/`max_chars`. Edits nothing in Workvivo, though like opening it in the browser, Workvivo may record the view.',
+          'fetches the file through your signed-in session and saves it in WORKVIVO_DOWNLOAD_DIR (default ' +
+          '~/Downloads/workvivo-mcp; repeat reads reuse it). Files over WORKVIVO_MAX_DOWNLOAD_MB (default 50) and ' +
+          'types in WORKVIVO_SKIP_FILE_TYPES (default video and audio) are skipped without downloading. Long documents page with `offset`/`max_chars`. Edits nothing in Workvivo, though like opening it in the browser, Workvivo may record the view.',
       ),
       annotations: toolAnnotations({
         title: 'Read a Workvivo document',
@@ -64,10 +65,16 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
     async ({ document_id, url, offset, max_chars }) => {
       const ref = documentRefOf({ document_id, url }, client.host);
       const file = await client.downloadDocument(ref);
+      const ids = { document_id: ref.kind === 'document' ? ref.id : undefined, file_id: ref.kind === 'file' ? ref.id : undefined };
+      if (file.kind === 'skipped') {
+        return markdownResult(
+          { ...ids, name: file.name, mime: file.mime, bytes: file.bytes, skipped: true },
+          `_Not downloaded: ${file.reason}. Open it in Workvivo, or change WORKVIVO_SKIP_FILE_TYPES / WORKVIVO_MAX_DOWNLOAD_MB._`,
+        );
+      }
       const doc = await extractDocument(file.path, file.mime, client.origin);
       const meta: Record<string, unknown> = {
-        document_id: ref.kind === 'document' ? ref.id : undefined,
-        file_id: ref.kind === 'file' ? ref.id : undefined,
+        ...ids,
         name: basename(file.path),
         mime: file.mime,
         bytes: file.bytes,

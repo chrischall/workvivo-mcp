@@ -33,6 +33,24 @@
           "description": "Set to 1 to log verbose request detail to stderr.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "WORKVIVO_DOWNLOAD_DIR",
+          "description": "Where linked documents are saved (default ~/Downloads/workvivo-mcp).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "WORKVIVO_MAX_DOWNLOAD_MB",
+          "description": "Documents larger than this are skipped, not downloaded (default 50).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "WORKVIVO_SKIP_FILE_TYPES",
+          "description": "Comma-separated extensions or MIME types never downloaded, e.g. mp4,.mov,video/* (default video/*,audio/*; none = skip nothing).",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

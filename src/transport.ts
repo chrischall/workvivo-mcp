@@ -56,6 +56,10 @@ export interface WorkvivoTransport {
    *  cross-origin redirect to the file host that a page `fetch` cannot). The
    *  file lands in the browser's download folder on THIS machine. */
   download(opts: { url: string; timeoutMs?: number }): Promise<DownloadResult>;
+  /** The URL that `path` on the Workvivo host redirects to, observed as the
+   *  browser follows it (nothing is downloaded). For document links that is a
+   *  short-lived signed file URL. */
+  captureSignedUrl(path: string): Promise<string>;
   /** Run one healthcheck probe through `fetchFn` and project bridge health. */
   runProbe(fetchFn: (path: string) => Promise<unknown>, probePath: string): Promise<BridgeProbeResult>;
   /** Diagnostic snapshot of the bridge. */

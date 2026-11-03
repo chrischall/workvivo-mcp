@@ -31,6 +31,18 @@ env:
     required: false
     help: >-
       Set to 1 to log verbose request detail to stderr.
+  - name: WORKVIVO_DOWNLOAD_DIR
+    required: false
+    help: >-
+      Where linked documents are saved (default ~/Downloads/workvivo-mcp).
+  - name: WORKVIVO_MAX_DOWNLOAD_MB
+    required: false
+    help: >-
+      Documents larger than this are skipped, not downloaded (default 50).
+  - name: WORKVIVO_SKIP_FILE_TYPES
+    required: false
+    help: >-
+      Comma-separated extensions or MIME types never downloaded, e.g. mp4,.mov,video/* (default video/*,audio/*; none = skip nothing).
 state:
   dataDir: true
   reason: >-
@@ -46,7 +58,11 @@ egress:
   # mode). WORKVIVO_HOST only selects WHICH tab the extension routes to. The
   # only socket the process opens is the loopback concentrator the extension
   # connects to; the SAML sign-in hosts are followed by the browser.
-  # Documents are downloaded by the BROWSER (chrome.downloads) and read from
-  # its download folder, so workvivo_get_document only works where the
-  # browser and this process share a disk — not on a hosted runner.
+  # One exception, tenant-specific so not listable here: linked documents.
+  # The bridge captures a document link's short-lived signed redirect target
+  # and THIS process GETs it — from the tenant's file host on the same apex as
+  # WORKVIVO_HOST (e.g. attachments.workvivo.us for acme.workvivo.us; other
+  # hosts are refused). Derive it from WORKVIVO_HOST when registering. If that
+  # host is unreachable, documents fall back to a browser download, which only
+  # works where the browser and this process share a disk.
   allow: []

@@ -42,6 +42,9 @@ comments, RSVPs or marks anything read.
 | `WORKVIVO_HOST` | yes | Your organization's Workvivo host, e.g. `acme.workvivo.us`. |
 | `WORKVIVO_WS_PORT` | no | Override the fetchproxy WebSocket port (default 37149). |
 | `WORKVIVO_DEBUG` | no | Set to `1` to log verbose request detail to stderr. |
+| `WORKVIVO_DOWNLOAD_DIR` | no | Where linked documents are saved (default `~/Downloads/workvivo-mcp`). |
+| `WORKVIVO_MAX_DOWNLOAD_MB` | no | Documents larger than this are skipped, not downloaded (default `50`). |
+| `WORKVIVO_SKIP_FILE_TYPES` | no | Comma-separated extensions or MIME types never downloaded, e.g. `mp4,.mov,video/*` (default `video/*,audio/*`; `none` skips nothing). |
 
 ## Tools
 
@@ -70,11 +73,15 @@ tokens, are redacted in every view. Note that `workvivo_search` adds the query t
 own Workvivo search history.
 
 **Documents** (`workvivo_get_document`, and `workvivo_digest_space` with
-`include_documents`) are downloaded by the *browser* — Workvivo's document links
-redirect to a signed file host a page fetch cannot follow — into its download
-folder on this machine, then read from there. That needs the browser and the
-server on the same machine (true for a local install, not for a hosted one), and
-a pairing that includes the `download` permission: if you paired before 0.2.0,
+`include_documents`): Workvivo's document links redirect to a short-lived signed URL
+on your tenant's file host. The bridge captures that URL as your browser follows the
+link, so nothing is downloaded by the browser. The server then checks the file
+**type** (from its name) against `WORKVIVO_SKIP_FILE_TYPES` before any request, and
+its **size** against `WORKVIVO_MAX_DOWNLOAD_MB` before reading the body. Files that
+pass are saved, never overwriting, in `WORKVIVO_DOWNLOAD_DIR`. If the capture isn't
+available, the browser downloads the file instead; the same rules then apply to it,
+and it is moved into `WORKVIVO_DOWNLOAD_DIR`. This needs a pairing that includes the
+`capture_redirect` and `download` permissions. If you paired an earlier version,
 remove workvivo-mcp in the ContextMint Bridge popup and approve the new pair code.
 
 The endpoints and their quirks are documented in [`docs/WORKVIVO-API.md`](docs/WORKVIVO-API.md).

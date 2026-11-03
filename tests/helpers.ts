@@ -1,4 +1,8 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createTestHarness } from '@chrischall/mcp-utils/test';
+import { parseSkipList, type DownloadPolicy } from '../src/download.js';
 import { WorkvivoClient } from '../src/client.js';
 import type { BridgeProbeResult, BridgeStatus, DownloadResult, FetchInit, FetchResult, WorkvivoTransport } from '../src/transport.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
@@ -33,6 +37,16 @@ export class StubTransport implements WorkvivoTransport {
   downloadCalls: string[] = [];
   /** url → what `download` resolves (or an Error it rejects with). */
   downloads: Record<string, DownloadResult | Error> = {};
+  captureCalls: string[] = [];
+  /** path → the signed URL `captureSignedUrl` resolves (or an Error). Unset → rejects, forcing the browser fallback. */
+  captures: Record<string, string | Error> = {};
+  async captureSignedUrl(path: string): Promise<string> {
+    this.captureCalls.push(path);
+    const c = this.captures[path];
+    if (c === undefined) throw new Error(`capability "capture_redirect" not granted (declared: [fetch, download])`);
+    if (c instanceof Error) throw c;
+    return c;
+  }
   constructor(public routes: Record<string, unknown | Handler> = {}) {}
   async download(opts: { url: string }): Promise<DownloadResult> {
     this.downloadCalls.push(opts.url);
@@ -75,9 +89,18 @@ export class StubTransport implements WorkvivoTransport {
   }
 }
 
-export function makeClient(routes: Record<string, unknown> = {}) {
+/** A download policy writing into a fresh temp dir — tests never touch ~/Downloads. */
+export function testPolicy(over: Partial<DownloadPolicy> = {}): DownloadPolicy & { root: string } {
+  const root = mkdtempSync(join(tmpdir(), 'workvivo-dl-'));
+  return { dir: () => root, maxBytes: 50 * 1024 * 1024, skip: parseSkipList(undefined), root, ...over };
+}
+
+export function makeClient(
+  routes: Record<string, unknown> = {},
+  opts: { downloadPolicy?: DownloadPolicy | Error; fetchImpl?: typeof fetch } = {},
+) {
   const transport = new StubTransport(routes);
-  const client = new WorkvivoClient({ transport, host: HOST });
+  const client = new WorkvivoClient({ transport, host: HOST, downloadPolicy: opts.downloadPolicy ?? testPolicy(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
   return { transport, client };
 }
 
@@ -98,8 +121,11 @@ export const ALL_REGISTRARS = [
   registerRawTools,
 ];
 
-export async function harnessFor(routes: Record<string, unknown> = {}) {
-  const { transport, client } = makeClient(routes);
+export async function harnessFor(
+  routes: Record<string, unknown> = {},
+  opts: { downloadPolicy?: DownloadPolicy | Error; fetchImpl?: typeof fetch } = {},
+) {
+  const { transport, client } = makeClient(routes, opts);
   const harness = await createTestHarness((s) => {
     for (const r of ALL_REGISTRARS) r(s, client);
   });
