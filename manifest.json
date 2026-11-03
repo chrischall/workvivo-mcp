@@ -1,0 +1,136 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/dxt/main/dist/mcpb-manifest.schema.json",
+  "manifest_version": "0.3",
+  "name": "workvivo-mcp",
+  "display_name": "Workvivo",
+  "version": "0.0.0",
+  "description": "Read-only Workvivo access for Claude — your company feed, news, events, people directory, spaces and search through your signed-in session",
+  "author": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com",
+    "url": "https://github.com/chrischall"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrischall/workvivo-mcp"
+  },
+  "homepage": "https://github.com/chrischall/workvivo-mcp",
+  "support": "https://github.com/chrischall/workvivo-mcp/issues",
+  "license": "MIT",
+  "keywords": [
+    "workvivo",
+    "intranet",
+    "employee-experience",
+    "news",
+    "directory"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/bundle.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/bundle.js"
+      ],
+      "env": {
+        "WORKVIVO_HOST": "${user_config.host}",
+        "WORKVIVO_WS_PORT": "${user_config.ws_port}",
+        "WORKVIVO_DEBUG": "${user_config.debug}"
+      }
+    }
+  },
+  "user_config": {
+    "host": {
+      "type": "string",
+      "title": "Workvivo host",
+      "description": "Your organization's Workvivo host — the address you sign in to, e.g. acme.workvivo.us.",
+      "required": true
+    },
+    "ws_port": {
+      "type": "string",
+      "title": "fetchproxy port",
+      "description": "Override the fetchproxy WebSocket port (default 37149).",
+      "required": false
+    },
+    "debug": {
+      "type": "string",
+      "title": "Debug logging",
+      "description": "Set to 1 to log verbose request detail to stderr.",
+      "required": false
+    }
+  },
+  "tools": [
+    {
+      "name": "workvivo_healthcheck",
+      "description": "Verify the fetchproxy bridge, the extension and your Workvivo sign-in end-to-end"
+    },
+    {
+      "name": "workvivo_get_feed",
+      "description": "Read the home feed, a space's feed or a person's posts"
+    },
+    {
+      "name": "workvivo_list_news",
+      "description": "List company news articles — all, one space's, or the featured stories"
+    },
+    {
+      "name": "workvivo_get_article",
+      "description": "Read one news article in full, body as plain text"
+    },
+    {
+      "name": "workvivo_get_post",
+      "description": "Read one post (update) or shoutout (kudos) in full"
+    },
+    {
+      "name": "workvivo_list_shoutouts",
+      "description": "List recent shoutouts — who thanked whom, and why"
+    },
+    {
+      "name": "workvivo_get_comments",
+      "description": "Read the comments on a post, article, event or shoutout, with commenter names"
+    },
+    {
+      "name": "workvivo_list_events",
+      "description": "List upcoming events — times in UTC, location, RSVP state"
+    },
+    {
+      "name": "workvivo_get_event",
+      "description": "Read one event in full (meeting passcodes redacted)"
+    },
+    {
+      "name": "workvivo_search_people",
+      "description": "Search the people directory by name"
+    },
+    {
+      "name": "workvivo_get_person",
+      "description": "Read a colleague's profile — role, manager, bio, expertise"
+    },
+    {
+      "name": "workvivo_get_me",
+      "description": "Read who you are signed in as"
+    },
+    {
+      "name": "workvivo_get_my_team",
+      "description": "List the people on your team"
+    },
+    {
+      "name": "workvivo_list_spaces",
+      "description": "List your spaces, all spaces, trending spaces, or search spaces by name"
+    },
+    {
+      "name": "workvivo_get_space",
+      "description": "Read one space's details"
+    },
+    {
+      "name": "workvivo_list_notifications",
+      "description": "List your notifications with unread counts (does not mark anything read)"
+    },
+    {
+      "name": "workvivo_search",
+      "description": "Full-text search across articles, posts, events, people, spaces and documents"
+    },
+    {
+      "name": "workvivo_api_get",
+      "description": "GET any other read-only Workvivo API path (credential fields redacted)"
+    }
+  ]
+}

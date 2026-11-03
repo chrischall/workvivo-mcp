@@ -1,0 +1,22 @@
+{
+  "name": "workvivo-mcp",
+  "displayName": "Workvivo",
+  "version": "0.0.0",
+  "description": "Read-only Workvivo for Claude — feed, news, events, people, spaces and search through your signed-in session",
+  "author": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "homepage": "https://github.com/chrischall/workvivo-mcp",
+  "repository": "https://github.com/chrischall/workvivo-mcp",
+  "license": "MIT",
+  "keywords": [
+    "workvivo",
+    "intranet",
+    "news",
+    "directory",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

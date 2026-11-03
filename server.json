@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.chrischall/workvivo-mcp",
+  "description": "Read-only Workvivo for Claude — feed, news, events, people and search via your signed-in session",
+  "repository": {
+    "url": "https://github.com/chrischall/workvivo-mcp",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "workvivo-mcp",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "WORKVIVO_HOST",
+          "description": "Your organization's Workvivo host, e.g. acme.workvivo.us.",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "WORKVIVO_WS_PORT",
+          "description": "Override the fetchproxy WebSocket port (default 37149).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "WORKVIVO_DEBUG",
+          "description": "Set to 1 to log verbose request detail to stderr.",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

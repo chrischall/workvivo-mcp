@@ -1,0 +1,49 @@
+version: 1
+name: Workvivo
+slug: workvivo
+summary: >-
+  Read-only Workvivo access for Claude — your company feed, news, events,
+  people directory, spaces and search through your signed-in session
+examples:
+  - prompt: What's new on Workvivo today? Summarize the top posts and news in my feed.
+    note: Reads the home feed with workvivo_get_feed.
+  - prompt: Are there any company events this week I haven't RSVP'd to?
+    note: Lists upcoming events with workvivo_list_events.
+  - prompt: Search Workvivo for the latest article about benefits enrollment and summarize it.
+    note: Uses workvivo_search, then workvivo_get_article.
+#
+# Hosting note (a comment, not user-facing summary text): this is a
+# BROWSER-BRIDGE MCP — it reaches Workvivo through the user's signed-in tab
+# via the fetchproxy bridge. A bridged registration also needs runtime
+# `fly-shared`, `bridge: true` and `bridgePortEnv: WORKVIVO_WS_PORT`, which are
+# registration fields this manifest has no schema for (set them over the
+# control API). `state.dataDir` below is required for `bridge`.
+env:
+  - name: WORKVIVO_HOST
+    required: true
+    help: >-
+      Your organization's Workvivo host, e.g. acme.workvivo.us.
+  - name: WORKVIVO_WS_PORT
+    required: false
+    help: >-
+      Override the fetchproxy WebSocket port (default 37149).
+  - name: WORKVIVO_DEBUG
+    required: false
+    help: >-
+      Set to 1 to log verbose request detail to stderr.
+state:
+  dataDir: true
+  reason: >-
+    The fetchproxy identity lives at $HOME/.fetchproxy/identity/workvivo-mcp.json
+    (with its extension pin beside it) and the pair code derives from it.
+    Without a persistent $HOME every cold start mints a fresh identity and
+    re-prompts pairing in the browser; the API refuses bridge without it.
+egress:
+  # Empty on purpose: this is a pure browser-bridge MCP. Every Workvivo
+  # request (https://<WORKVIVO_HOST>/ and /api/…) is made by the user's
+  # signed-in tab via the ContextMint Bridge extension, never by this process
+  # (src/transport-fetchproxy.ts is the only transport; there is no direct
+  # mode). WORKVIVO_HOST only selects WHICH tab the extension routes to. The
+  # only socket the process opens is the loopback concentrator the extension
+  # connects to; the SAML sign-in hosts are followed by the browser.
+  allow: []

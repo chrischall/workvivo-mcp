@@ -1,0 +1,63 @@
+{
+  "name": "workvivo-mcp",
+  "version": "0.0.0",
+  "mcpName": "io.github.chrischall/workvivo-mcp",
+  "description": "Workvivo MCP server for Claude — developed and maintained by AI (Claude Code)",
+  "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrischall/workvivo-mcp.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "ai",
+    "workvivo",
+    "intranet",
+    "employee-experience",
+    "news"
+  ],
+  "type": "module",
+  "bin": {
+    "workvivo-mcp": "dist/bundle.js"
+  },
+  "files": [
+    "dist",
+    ".claude-plugin",
+    ".mcp.json",
+    "server.json",
+    "skills",
+    "mint.yaml"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && npm run bundle",
+    "bundle": "node scripts/bundle.mjs",
+    "dev": "node dist/bundle.js",
+    "test": "npm run typecheck && vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "npm run typecheck && vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@chrischall/mcp-utils": "^3.4.0",
+    "@fetchproxy/server": "^3.6.2",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "node-html-parser": "^9.0.6",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@types/node": "^26.0.1",
+    "@vitest/coverage-v8": "^5.0.0",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.19.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  },
+  "allowScripts": {
+    "esbuild": false,
+    "fsevents": false
+  }
+}

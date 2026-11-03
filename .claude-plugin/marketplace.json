@@ -1,0 +1,35 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "workvivo-mcp",
+  "owner": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "metadata": {
+    "description": "Read-only MCP server for Workvivo — your company feed, news, events, people directory, spaces and search. Routes through the user's signed-in Workvivo tab via the ContextMint Bridge browser extension, reusing their existing SSO-authenticated session.",
+    "version": "0.0.0"
+  },
+  "plugins": [
+    {
+      "name": "workvivo-mcp",
+      "displayName": "Workvivo",
+      "source": "./",
+      "description": "Read-only Workvivo for Claude — feed, news, events, people, spaces and search through your signed-in session",
+      "version": "0.0.0",
+      "author": {
+        "name": "Chris Hall"
+      },
+      "homepage": "https://github.com/chrischall/workvivo-mcp",
+      "repository": "https://github.com/chrischall/workvivo-mcp",
+      "license": "MIT",
+      "keywords": [
+        "workvivo",
+        "intranet",
+        "news",
+        "directory",
+        "mcp"
+      ],
+      "category": "productivity"
+    }
+  ]
+}
