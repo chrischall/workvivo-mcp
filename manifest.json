@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "workvivo-mcp",
   "display_name": "Workvivo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only Workvivo access for Claude — your company feed, news, events, people directory, spaces and search through your signed-in session",
   "author": {
     "name": "Chris Hall",
