@@ -52,6 +52,7 @@ comments, RSVPs or marks anything read.
 | `workvivo_list_news` / `workvivo_get_article` | News articles; one article with its body as text |
 | `workvivo_get_post` / `workvivo_list_shoutouts` | A post or shoutout; recent shoutouts |
 | `workvivo_get_comments` | Comments on a post, article, event or shoutout, with names |
+| `workvivo_get_question` | A Q&A question with its answers, votes and the accepted answer |
 | `workvivo_list_events` / `workvivo_get_event` | Upcoming events (UTC times, RSVP state); one event |
 | `workvivo_search_people` / `workvivo_get_person` | The directory; a profile (role, manager, bio) |
 | `workvivo_get_me` / `workvivo_get_my_team` | You; your team |

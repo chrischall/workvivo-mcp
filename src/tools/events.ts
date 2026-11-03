@@ -1,9 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkvivoClient } from '../client.js';
-import { event } from '../project.js';
+import { event, listOf } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
-import { listOf } from './news.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
 
 export function registerEventTools(server: McpServer, client: WorkvivoClient): void {

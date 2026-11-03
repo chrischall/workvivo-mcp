@@ -127,7 +127,7 @@ describe('records', () => {
     expect(space(fx.spaceList.data[0])).toEqual({ id: 30, name: 'Company News', description: 'Your trusted source for updates.', members: 18000, is_member: true, official: true, url: 'spaces/30' });
     expect(notification(fx.notifications.data[0])).toEqual({ id: 'a322aa6a-0000-0000-0000-000000000000', read: false, at: '2026-11-03T08:00:33Z', kind: 'ArticlePublishedNotification', title: 'Quarterly update', item_type: 'news', item_id: 7001 });
     expect(comment(fx.comments[1], new Map([[102, 'Bob Sample']]))).toEqual({ id: 2, reply_to: 1, user_id: 102, by: 'Bob Sample', at: '2026-10-21T09:00:00Z', text: 'Agreed', likes: 0 });
-    expect(searchHit(fx.searchResults.data[0])).toEqual({ type: 'article', id: 7001, title: 'Quarterly update', url: 'news/7001', updated_at: '2026-10-19T21:08:20.000000Z', by: 'Comms Team', text: 'We shipped three things' });
+    expect(searchHit(fx.searchResults.data[0])).toEqual({ type: 'article', id: 7001, title: 'Quarterly update', url: 'news/7001', updated_at: '2026-10-19T21:08:20Z', by: 'Comms Team', text: 'We shipped three things' });
   });
 
   it('non-records project to empty objects', () => {

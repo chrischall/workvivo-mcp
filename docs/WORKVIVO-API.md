@@ -42,6 +42,8 @@ fixtures are synthetic.
 | Shoutouts | `kudos?page=N`, `kudos/<id>` | Laravel | giver in `giver`, recipients in `user_mentions[].user` |
 | Comments | `comments/<type>/<id>` | — | bare array; `type` ∈ `update article event kudos` (verified). Carries `user_id` only. Question posts use answers, not comments. |
 | Likes | `likedby/<type>/<id>` | — | `{default:[names]}` |
+| Q&A question | `question-posts/<id>` | — | body is HTML; `accepted_answer` object. Viewing is counted by a separate `POST …/log-view`, never sent. |
+| Q&A answers | `question-posts/<id>/answers?page=N` | Laravel | `accepted`, `votes`, `user`, HTML `body` |
 | Events | `events/listings?page=N` | Laravel (5) | `*_utc` fields, `is_going`, `permalink` |
 | Upcoming | `events/upcoming` | — | bare array |
 | Space events | `spaces/<id>/events?page=N` | Laravel | |

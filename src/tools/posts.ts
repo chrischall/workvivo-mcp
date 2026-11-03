@@ -2,9 +2,8 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { mapWithConcurrency } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { WorkvivoClient } from '../client.js';
-import { comment, person, post } from '../project.js';
+import { comment, listOf, person, post } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
-import { listOf } from './news.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
 
 /** Comment-bearing item types — each verified live against `comments/<type>/<id>`. */

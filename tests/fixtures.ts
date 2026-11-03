@@ -226,3 +226,27 @@ export const searchResults = {
     },
   ],
 };
+
+export const questionPost = {
+  id: 4001,
+  title: 'Our mission',
+  body: '<p>What is the club mission?</p>',
+  created_at: '2025-08-09 02:05:19',
+  user: alice,
+  answered: true,
+  answers_count: 2,
+  accepted_answer: { id: 4101 },
+  votes: 3,
+  views_count: 40,
+  spaces: [{ id: 31, name: 'Speakers Club' }],
+  relative_permalink: 'spaces/31/questions/4001',
+};
+
+export const answers = {
+  current_page: 1,
+  next_page_url: 'https://acme.workvivo.us/api/question-posts/4001/answers?page=2',
+  data: [
+    { id: 4101, question_post_id: 4001, body: '<p>To help people <strong>grow</strong>.</p>', accepted: true, votes: 2, comments_count: 0, created_at: '2025-08-10 09:00:00', user: bob },
+    { id: 4102, question_post_id: 4001, body: '<p>Practice.</p>', accepted: false, votes: 0, comments_count: 1, created_at: '2025-08-11 09:00:00', user: alice },
+  ],
+};
