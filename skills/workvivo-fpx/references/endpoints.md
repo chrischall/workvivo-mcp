@@ -115,6 +115,42 @@ wv_get spaces/30/links | jq '{title, body}'                # the space's useful-
 `spaces/<id>/members` is refused (`403 This action is unauthorized.`) unless you own
 the space.
 
+## Pages (a space's wiki-style content)
+
+Pages are addressed by **slug** (the last URL segment: `spaces/30/pages/<slug>`), not by
+id. Global "page collections" use `pages/<group>/<slug>`.
+
+```sh
+# The page tree: id, slug, title, nested
+wv_get 'spaces/30/pages-v2?include_content=false' | jq -r 'def t(d): .[] | ("  " * d) + "\(.id) \(.slug)  \(.title)", ((.children // []) | t(d+1)); .pages | t(0)'
+
+# One page's content. TinyMCE pages are HTML; Lexical pages are JSON blocks whose text is already Markdown
+wv_get 'spaces/30/pages/<slug>?include_content=true' | jq -r '.page | if .editor_type == "lexical"
+  then (.json_content | fromjson | [.. | objects | .content?.text? // empty] | join("\n\n"))
+  else .html_content end'
+
+# Global page collection
+wv_get 'pages-v2/248?include_content=false' | jq '.pages'
+wv_get 'pages/248/<slug>?include_content=true' | jq -r '.page.html_content'
+```
+
+The HTML carries signed image URLs (`?Expires=…&Signature=…`); strip or drop them
+before pasting a page anywhere. For clean Markdown, use workvivo-mcp's
+`workvivo_get_page`.
+
+## Documents (`/document/link/<id>`)
+
+Document links redirect to a signed file host, so `fpx get` fails with "Failed to
+fetch". Download them through the browser instead (this needs the profile's
+`--allow-download` scope, which the setup above declares):
+
+```sh
+fpx download "https://$WORKVIVO_HOST/document/link/<id>" -p workvivo | jq '{path, bytes, mime}'
+```
+
+The file lands in the browser's download folder. Downloading the same link again
+saves `… (1).pdf`. Read PDFs with any PDF-to-text tool (e.g. `pdftotext <path> -`).
+
 ## Search
 
 ```sh

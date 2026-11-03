@@ -1,6 +1,6 @@
 import { createTestHarness } from '@chrischall/mcp-utils/test';
 import { WorkvivoClient } from '../src/client.js';
-import type { BridgeProbeResult, BridgeStatus, FetchInit, FetchResult, WorkvivoTransport } from '../src/transport.js';
+import type { BridgeProbeResult, BridgeStatus, DownloadResult, FetchInit, FetchResult, WorkvivoTransport } from '../src/transport.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
 import { registerFeedTools } from '../src/tools/feed.js';
 import { registerNewsTools } from '../src/tools/news.js';
@@ -11,6 +11,9 @@ import { registerSpaceTools } from '../src/tools/spaces.js';
 import { registerNotificationTools } from '../src/tools/notifications.js';
 import { registerSearchTools } from '../src/tools/search.js';
 import { registerQuestionTools } from '../src/tools/questions.js';
+import { registerPageTools } from '../src/tools/pages.js';
+import { registerDocumentTools } from '../src/tools/documents.js';
+import { registerDigestTools } from '../src/tools/digest.js';
 import { registerRawTools } from '../src/tools/raw.js';
 
 export const HOST = 'acme.workvivo.us';
@@ -27,7 +30,17 @@ type Handler = (init: FetchInit) => Partial<FetchResult> | unknown;
  */
 export class StubTransport implements WorkvivoTransport {
   calls: FetchInit[] = [];
+  downloadCalls: string[] = [];
+  /** url → what `download` resolves (or an Error it rejects with). */
+  downloads: Record<string, DownloadResult | Error> = {};
   constructor(public routes: Record<string, unknown | Handler> = {}) {}
+  async download(opts: { url: string }): Promise<DownloadResult> {
+    this.downloadCalls.push(opts.url);
+    const d = this.downloads[opts.url];
+    if (!d) throw new Error(`no stub download for ${opts.url}`);
+    if (d instanceof Error) throw d;
+    return d;
+  }
   async start(): Promise<void> {}
   async close(): Promise<void> {}
   status(): BridgeStatus {
@@ -79,6 +92,9 @@ export const ALL_REGISTRARS = [
   registerNotificationTools,
   registerSearchTools,
   registerQuestionTools,
+  registerPageTools,
+  registerDocumentTools,
+  registerDigestTools,
   registerRawTools,
 ];
 

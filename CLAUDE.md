@@ -21,6 +21,16 @@ is behind SAML SSO and its public API needs an admin token.
   `compact` and `full`, because events carry `zoom_webinar_password` and `user`
   carries realtime/analytics tokens. Compact projections are allowlists, so
   phones and birthdays never leave `workvivo_get_person` compact.
+- **Pages → Markdown** (`src/markdown.ts`): TinyMCE HTML via turndown (signed media
+  URLs dropped, links made absolute, GFM tables), Lexical `{blocks}` via a block
+  walker (its text is already Markdown). `extractLinks` classifies every link and
+  gives a "View"/"ES" link the heading or document it belongs to.
+- **Documents ride the bridge's `download` verb** (`capabilities: ['fetch','download']`),
+  because `/document/link/<id>` 302s to a signed file host. The browser saves the file
+  locally and the server reads it, so this works only where both run on one machine.
+  An old pairing without `download` is *refused*, not re-prompted;
+  `mapDownloadError` turns that into the re-pair remedy. pdf.js writes warnings to
+  STDOUT (the JSON-RPC channel): `extractPdf` passes `verbosity: 0`, so keep it.
 - **Times are UTC.** Workvivo's `YYYY-MM-DD HH:MM:SS` stamps are UTC (verified
   against `*_utc` twins); `utcIso` adds the `Z`.
 - **Fixtures are synthetic.** `tests/fixtures.ts` mirrors live shapes with invented

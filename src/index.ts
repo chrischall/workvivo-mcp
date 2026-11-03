@@ -23,6 +23,9 @@ import { registerSpaceTools } from './tools/spaces.js';
 import { registerNotificationTools } from './tools/notifications.js';
 import { registerSearchTools } from './tools/search.js';
 import { registerQuestionTools } from './tools/questions.js';
+import { registerPageTools } from './tools/pages.js';
+import { registerDocumentTools } from './tools/documents.js';
+import { registerDigestTools } from './tools/digest.js';
 import { registerRawTools } from './tools/raw.js';
 import { VERSION } from './version.js';
 
@@ -62,6 +65,9 @@ await runMcp({
     (server) => registerNotificationTools(server, client),
     (server) => registerSearchTools(server, client),
     (server) => registerQuestionTools(server, client),
+    (server) => registerPageTools(server, client),
+    (server) => registerDocumentTools(server, client),
+    (server) => registerDigestTools(server, client),
     (server) => registerRawTools(server, client),
   ],
   banner:

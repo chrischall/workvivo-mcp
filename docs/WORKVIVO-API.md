@@ -60,6 +60,38 @@ fixtures are synthetic.
 | Quick name search | `search/<term>?v2=1` | — | `{people, teams, goals, spaces}` |
 | **Federated search** (POST) | `federated-search` | `page` in body | Body `{page, query, types:[…]}`; an unknown type is a 422. Results `{current_page, last_page, data:[{id, type, title (with <strong>), url, updated_at, details:{author, text}}]}`. Side effect: records the query in the user's search history. |
 
+## Pages and documents
+
+| Purpose | Path | Notes |
+|---|---|---|
+| Space page tree | `spaces/<id>/pages-v2?include_content=false` | `{page (landing), pages:[{id,title,slug,is_draft,children:[…]}]}` |
+| Space page | `spaces/<id>/pages/<slug>?include_content=true` | addressed by **slug**, not id (`pages/59817` → "No query results"); some slugs are the id. No slug = the landing page. |
+| Global page tree | `pages-v2/<group>?include_content=false` | "page collections" (`page_group_id`) |
+| Global page | `pages/<group>/<slug>?include_content=true` | |
+| Space document library | `spaces/<id>/documents?page=N` | Laravel pages of 12 |
+| Space useful links | `spaces/<id>/links` | `{title, body (HTML)}` |
+
+Pages are written in one of two editors:
+
+- `editor_type: "tinymce"`: HTML in `html_content`, laid out with Bootstrap grid
+  divs. Images are on **signed** CloudFront URLs (`Expires`/`Signature`), which are
+  never emitted.
+- `editor_type: "lexical"`: `html_content` is empty, and `json_content` is a JSON
+  string `{blocks:[…]}`. Each block's `content.text` is already Markdown, with
+  occasional inline `<span style>` tags. Block types seen: paragraph,
+  styled-paragraph, heading, list/listitem, layout-container/-item,
+  alert-component, collapsible-container, button, image, card/cards-container and
+  horizontalrule.
+
+**Documents** are linked as `/document/link/<id>` (and `/file/<id>`). These are
+server routes, not `/api`, and they 302 to a signed file host
+(`attachments.workvivo.us`), so a page `fetch` fails with "Failed to fetch". The
+bridge's `download` verb (`chrome.downloads`) follows the redirect and saves the
+file. Note that `documents/<id>` in the API is a *different* id space: a link id
+there answers "No query results". The `download` capability has to be in the
+pairing, and the extension refuses (rather than re-prompting) a pairing approved
+without it.
+
 ## Times
 
 Every timestamp is UTC, in `YYYY-MM-DD HH:MM:SS` form. Checked against the `*_utc`

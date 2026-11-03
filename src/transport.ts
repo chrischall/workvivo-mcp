@@ -32,6 +32,16 @@ export interface FetchResult {
   url: string;
 }
 
+/** A file the BROWSER downloaded (chrome.downloads) — saved on this machine. */
+export interface DownloadResult {
+  /** Absolute local path the browser saved the file to. */
+  path: string;
+  bytes: number;
+  mime?: string;
+  /** Final URL after redirects (a signed file URL — never return it). */
+  finalUrl?: string;
+}
+
 export type BridgeStatus = import('@chrischall/mcp-utils/fetchproxy').BridgeHealth;
 export type BridgeProbeResult = import('@chrischall/mcp-utils/fetchproxy').BridgeProbeResult;
 
@@ -42,6 +52,10 @@ export interface WorkvivoTransport {
   close(): Promise<void>;
   /** Round-trip one request through the bridge. Resolves for any status. */
   fetch(init: FetchInit): Promise<FetchResult>;
+  /** Download `url` through the browser's own network stack (follows the
+   *  cross-origin redirect to the file host that a page `fetch` cannot). The
+   *  file lands in the browser's download folder on THIS machine. */
+  download(opts: { url: string; timeoutMs?: number }): Promise<DownloadResult>;
   /** Run one healthcheck probe through `fetchFn` and project bridge health. */
   runProbe(fetchFn: (path: string) => Promise<unknown>, probePath: string): Promise<BridgeProbeResult>;
   /** Diagnostic snapshot of the bridge. */

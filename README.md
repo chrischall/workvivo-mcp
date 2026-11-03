@@ -56,6 +56,9 @@ comments, RSVPs or marks anything read.
 | `workvivo_list_events` / `workvivo_get_event` | Upcoming events (UTC times, RSVP state); one event |
 | `workvivo_search_people` / `workvivo_get_person` | The directory; a profile (role, manager, bio) |
 | `workvivo_get_me` / `workvivo_get_my_team` | You; your team |
+| `workvivo_list_pages` / `workvivo_get_page` | A space's (or global collection's) page tree; one page as **Markdown**, with an index of the pages and documents it links to |
+| `workvivo_get_document` | A linked document (PDF, Word, text, HTML) as Markdown — the browser downloads it through your session |
+| `workvivo_digest_space` | A whole space in one Markdown document: every page, the linked-document index, library, events, recent posts (optionally the documents' text) |
 | `workvivo_list_spaces` / `workvivo_get_space` | Your spaces, all spaces, trending, or by name; one space |
 | `workvivo_list_notifications` | Notifications and unread counts |
 | `workvivo_search` | Full-text search across articles, posts, events, people, spaces and docs |
@@ -65,6 +68,14 @@ Read tools return a compact projection by default. Pass `view: "full"` for Workv
 record as sent. Credential-shaped fields, such as meeting passcodes and realtime
 tokens, are redacted in every view. Note that `workvivo_search` adds the query to your
 own Workvivo search history.
+
+**Documents** (`workvivo_get_document`, and `workvivo_digest_space` with
+`include_documents`) are downloaded by the *browser* — Workvivo's document links
+redirect to a signed file host a page fetch cannot follow — into its download
+folder on this machine, then read from there. That needs the browser and the
+server on the same machine (true for a local install, not for a hosted one), and
+a pairing that includes the `download` permission: if you paired before 0.2.0,
+remove workvivo-mcp in the ContextMint Bridge popup and approve the new pair code.
 
 The endpoints and their quirks are documented in [`docs/WORKVIVO-API.md`](docs/WORKVIVO-API.md).
 

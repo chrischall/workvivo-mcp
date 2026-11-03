@@ -91,6 +91,6 @@ describe('server boot (bundled artifact, no node_modules)', () => {
     ]) {
       expect(tools).toContain(name);
     }
-    expect(tools.length).toBeGreaterThanOrEqual(19);
+    expect(tools.length).toBeGreaterThanOrEqual(23);
   });
 });

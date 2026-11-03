@@ -250,3 +250,55 @@ export const answers = {
     { id: 4102, question_post_id: 4001, body: '<p>Practice.</p>', accepted: false, votes: 0, comments_count: 1, created_at: '2025-08-11 09:00:00', user: alice },
   ],
 };
+
+// ---- pages (synthetic; shapes from live pages-v2 / pages responses)
+
+export const pageTreeResponse = {
+  success: true,
+  page: { id: 9001, title: 'About Us', slug: 'about-us' },
+  pages: [
+    {
+      id: 9001,
+      title: 'About Us',
+      slug: 'about-us',
+      is_draft: false,
+      children: [
+        { id: 9002, title: 'Annual Cycle', slug: 'annual-cycle', is_draft: false, children: [{ id: 9004, title: 'Goals', slug: '9004', children: [] }] },
+        { id: 9003, title: 'Draft Notes', slug: 'draft-notes', is_draft: true, children: [] },
+      ],
+    },
+  ],
+};
+
+export const tinymcePage = {
+  id: 9002,
+  title: 'Annual Cycle',
+  slug: 'annual-cycle',
+  space_id: 30,
+  page_group_id: null,
+  parent_id: 9001,
+  editor_type: 'tinymce',
+  updated_at: '2026-05-20 15:26:27',
+  is_draft: false,
+  html_content:
+    '<div class="row"><div class="col-sm-8"><h4>Resources</h4><p>Read the <a href="https://acme.workvivo.us/document/link/501">Cycle Guide</a>, ' +
+    'then see <a href="https://acme.workvivo.us/spaces/30/pages/9004">Goals</a>.</p>' +
+    '<p><img alt="banner" src="https://cdn.example.com/b.png?Expires=1&Signature=SECRETSIG"></p></div></div>',
+  json_content: null,
+};
+
+export const lexicalPage = {
+  id: 9004,
+  title: 'Goals',
+  slug: '9004',
+  space_id: 30,
+  parent_id: 9002,
+  editor_type: 'lexical',
+  html_content: '',
+  json_content: JSON.stringify({
+    blocks: [
+      { type: 'heading', level: 2, content: { text: 'Set your goals' } },
+      { type: 'paragraph', content: { text: 'Use the [Goal Template](/document/link/502) [ES](/document/link/503).' } },
+    ],
+  }),
+};

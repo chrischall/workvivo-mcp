@@ -13,6 +13,7 @@
 // analytics keys.
 
 import { htmlToReadableText } from '@chrischall/mcp-utils/html';
+import { htmlToMarkdown, lexicalToMarkdown } from './markdown.js';
 
 type Rec = Record<string, unknown>;
 
@@ -387,5 +388,71 @@ export function searchHit(h: unknown): Rec {
     updated_at: utcIso(h.updated_at),
     by: str(details.author),
     ...(snippet ? clip(snippet, 300) : {}),
+  });
+}
+
+// ---------------------------------------------------------------- pages
+
+export interface PageNode {
+  id?: number;
+  title?: string;
+  slug?: string;
+  draft?: true;
+  children?: PageNode[];
+}
+
+/** A pages-v2 tree → `{id, title, slug, children}` nodes (drafts flagged). */
+export function pageTree(nodes: unknown): PageNode[] {
+  return arr(nodes).flatMap((n) => {
+    if (!isRec(n)) return [];
+    const kids = pageTree(n.children);
+    return [
+      prune({
+        id: num(n.id),
+        title: str(n.title),
+        slug: str(n.slug),
+        draft: n.is_draft === true ? (true as const) : undefined,
+        children: kids.length ? kids : undefined,
+      }) as PageNode,
+    ];
+  });
+}
+
+/** Flatten a tree, depth-first, keeping each node's depth. */
+export function flattenTree(nodes: PageNode[], depth = 0): Array<PageNode & { depth: number }> {
+  return nodes.flatMap((n) => [{ ...n, depth }, ...flattenTree(n.children ?? [], depth + 1)]);
+}
+
+/** A page's body as Markdown, whichever editor wrote it. */
+export function pageMarkdown(page: unknown, origin: string): string {
+  if (!isRec(page)) return '';
+  const lexical = str(page.json_content);
+  const html = str(page.html_content);
+  if (page.editor_type === 'lexical' && lexical) return lexicalToMarkdown(lexical, origin);
+  if (html) return htmlToMarkdown(html, origin);
+  if (lexical) return lexicalToMarkdown(lexical, origin);
+  return '';
+}
+
+/** Page metadata for the front matter / JSON view. */
+export function pageMeta(page: unknown, origin: string): Rec {
+  if (!isRec(page)) return {};
+  const id = num(page.id);
+  const slug = str(page.slug);
+  const space = num(page.space_id);
+  const group = num(page.page_group_id);
+  const url = slug ? (group ? `${origin}/pages/${group}/${slug}` : space ? `${origin}/spaces/${space}/pages/${slug}` : undefined) : undefined;
+  return prune({
+    id,
+    title: str(page.title),
+    subtitle: str(page.subtitle),
+    slug,
+    space_id: space,
+    page_group_id: group,
+    parent_id: num(page.parent_id),
+    editor: str(page.editor_type),
+    updated_at: utcIso(page.updated_at),
+    draft: page.is_draft === true ? true : undefined,
+    url,
   });
 }

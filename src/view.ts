@@ -39,6 +39,20 @@ export const WV_UNTRUSTED_NOTE =
 export const untrustedDescription = (description: string): string =>
   `${description} ${UNTRUSTED_DESCRIPTION_SUFFIX}`;
 
+/**
+ * A Markdown result: an untrusted-content notice as a blockquote, YAML-ish
+ * front matter, then the body. Markdown cannot carry the JSON envelope's
+ * `untrusted_content` key, so the notice leads the text instead.
+ */
+export function markdownResult(meta: Record<string, unknown>, body: string): CallToolResult {
+  const fm = Object.entries(meta)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}: ${typeof v === 'string' ? JSON.stringify(v) : JSON.stringify(v)}`)
+    .join('\n');
+  const text = `> **Untrusted content.** ${WV_UNTRUSTED_NOTE}\n\n---\n${fm}\n---\n\n${body.trim()}\n`;
+  return { content: [{ type: 'text', text }] };
+}
+
 /** Answer a read tool in the requested rung: project (compact), redact, fence. */
 export function respond(
   view: string | undefined,
