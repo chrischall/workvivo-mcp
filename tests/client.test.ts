@@ -8,7 +8,18 @@ import {
   normalizeHost,
   withQuery,
 } from '../src/client.js';
+import type { McpToolError } from '@chrischall/mcp-utils';
 import { HOST, StubTransport, TOKEN, makeClient } from './helpers.js';
+
+/** The rejection of `p`, typed — and a test failure if `p` resolves. */
+async function failure(p: Promise<unknown>): Promise<McpToolError> {
+  try {
+    await p;
+  } catch (e) {
+    return e as McpToolError;
+  }
+  throw new Error('expected the call to reject');
+}
 
 describe('normalizeHost', () => {
   it('accepts a bare host, a URL, and a pasted page URL', () => {
@@ -72,7 +83,7 @@ describe('WorkvivoClient', () => {
 
   it('treats a second 401 (or 419) as a signed-out session', async () => {
     const { client } = makeClient({ '/api/user': { status: 419, body: '' } });
-    const err = await client.get('user').catch((e) => e);
+    const err = await failure(client.get('user'));
     expect(err).toBeInstanceOf(WorkvivoSessionError);
     expect(err.kind).toBe('session_expired');
     expect(err.message).toContain(`https://${HOST}`);
@@ -90,14 +101,14 @@ describe('WorkvivoClient', () => {
 
   it('treats a shell with no token as signed out', async () => {
     const { client } = makeClient({ '/': { body: '<html>sign in</html>' } });
-    const err = await client.get('user').catch((e) => e);
+    const err = await failure(client.get('user'));
     expect(err).toBeInstanceOf(WorkvivoSessionError);
     expect(err.message).toContain('no session token');
   });
 
   it('surfaces a failing home page as an API error', async () => {
     const { client } = makeClient({ '/': { status: 503, body: 'down' } });
-    const err = await client.get('user').catch((e) => e);
+    const err = await failure(client.get('user'));
     expect(err).toBeInstanceOf(WorkvivoApiError);
     expect(err.status).toBe(503);
   });
@@ -109,17 +120,17 @@ describe('WorkvivoClient', () => {
       '/api/v': { status: 422, body: '{"message":"The query field is required."}' },
       '/api/s': { status: 500, body: '{"message":"Server Error"}' },
     });
-    const f = await client.get('f').catch((e) => e);
+    const f = await failure(client.get('f'));
     expect(f.status).toBe(403);
     expect(f.message).toContain('This action is unauthorized.');
     expect(f.hint).toMatch(/not permitted/);
-    const n = await client.get('n').catch((e) => e);
+    const n = await failure(client.get('n'));
     expect(n.status).toBe(404);
     expect(n.message).not.toContain('<html>');
-    const v = await client.get('v').catch((e) => e);
+    const v = await failure(client.get('v'));
     expect(v.status).toBe(422);
     expect(v.message).toContain('The query field is required.');
-    const s = await client.get('s').catch((e) => e);
+    const s = await failure(client.get('s'));
     expect(s.status).toBe(500);
     expect(s.hint).toMatch(/check the id/i);
   });

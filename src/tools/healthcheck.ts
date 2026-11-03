@@ -11,6 +11,13 @@ import { WorkvivoConfigError, WorkvivoSessionError, type WorkvivoClient } from '
  */
 export const PROBE_PATH = '/api/notifications/unread';
 
+/** Name the Workvivo-specific failures; anything else is the bridge's to classify. */
+export function classifyWorkvivoError(err: unknown): { kind: string; hint: string } | undefined {
+  if (err instanceof WorkvivoConfigError) return { kind: 'not_configured', hint: err.message };
+  if (err instanceof WorkvivoSessionError) return { kind: 'session_expired', hint: err.hint ?? err.message };
+  return undefined;
+}
+
 export function registerHealthcheckTools(server: McpServer, client: WorkvivoClient): void {
   registerBridgeHealthcheckTool({
     server,
@@ -22,10 +29,6 @@ export function registerHealthcheckTools(server: McpServer, client: WorkvivoClie
       status: () => client.bridgeStatus(),
     },
     probeFn: () => client.get('notifications/unread'),
-    classifyThrown: (err) => {
-      if (err instanceof WorkvivoConfigError) return { kind: 'not_configured', hint: err.message };
-      if (err instanceof WorkvivoSessionError) return { kind: 'session_expired', hint: err.hint ?? err.message };
-      return undefined;
-    },
+    classifyThrown: classifyWorkvivoError,
   });
 }
