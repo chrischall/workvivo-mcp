@@ -50,6 +50,12 @@ describe('policy parsing', () => {
     expect(p.skip).toEqual(['.pptx']);
     expect(p.dir()).toBe(dir);
     expect(readDownloadPolicy({}).maxBytes).toBe(50 * 1024 * 1024);
+    // An unset .mcpb user_config arrives as "" or an unexpanded placeholder: defaults apply.
+    for (const unset of ['', '   ', '${user_config.max_download_mb}']) {
+      const q = readDownloadPolicy({ WORKVIVO_MAX_DOWNLOAD_MB: unset, WORKVIVO_SKIP_FILE_TYPES: unset });
+      expect(q.maxBytes).toBe(50 * 1024 * 1024);
+      expect(q.skip).toEqual(['video/*', 'audio/*']);
+    }
     for (const bad of ['0', '-1', 'big']) {
       expect(() => readDownloadPolicy({ WORKVIVO_MAX_DOWNLOAD_MB: bad })).toThrow(DownloadConfigError);
     }
@@ -84,6 +90,18 @@ describe('saveFromSignedUrl (the direct path)', () => {
     expect(a).toMatchObject({ kind: 'saved', name: 'Guide.pdf', bytes: 4, mime: 'application/pdf', via: 'direct', path: join(policy.root, 'Guide.pdf') });
     expect(b).toMatchObject({ kind: 'saved', name: 'Guide-2.pdf' });
     expect(readFileSync(join(policy.root, 'Guide.pdf'), 'latin1')).toBe('%PDF');
+  });
+
+  it('keeps a hostile served filename inside the download dir', async () => {
+    const policy = testPolicy();
+    const f = fakeFetch(new Uint8Array([1]), { 'content-type': 'application/pdf' });
+    for (const evil of ['../../evil.pdf', '/etc/evil.pdf', '..\\..\\evil.pdf']) {
+      const out = await saveFromSignedUrl(signed(evil), policy, tenant, f.impl);
+      expect(out.kind).toBe('saved');
+      const p = (out as { path: string }).path;
+      expect(p.startsWith(policy.root + '/')).toBe(true);
+      expect(p.slice(policy.root.length + 1)).not.toMatch(/[\\/]|^\.\.$/);
+    }
   });
 
   it('skips a filtered type WITHOUT making any request', async () => {
