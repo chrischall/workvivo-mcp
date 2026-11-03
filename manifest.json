@@ -35,7 +35,10 @@
       "env": {
         "WORKVIVO_HOST": "${user_config.host}",
         "WORKVIVO_WS_PORT": "${user_config.ws_port}",
-        "WORKVIVO_DEBUG": "${user_config.debug}"
+        "WORKVIVO_DEBUG": "${user_config.debug}",
+        "WORKVIVO_DOWNLOAD_DIR": "${user_config.download_dir}",
+        "WORKVIVO_MAX_DOWNLOAD_MB": "${user_config.max_download_mb}",
+        "WORKVIVO_SKIP_FILE_TYPES": "${user_config.skip_file_types}"
       }
     }
   },
@@ -56,6 +59,24 @@
       "type": "string",
       "title": "Debug logging",
       "description": "Set to 1 to log verbose request detail to stderr.",
+      "required": false
+    },
+    "download_dir": {
+      "type": "string",
+      "title": "Download folder",
+      "description": "Where linked documents are saved (default ~/Downloads/workvivo-mcp).",
+      "required": false
+    },
+    "max_download_mb": {
+      "type": "string",
+      "title": "Max document size (MB)",
+      "description": "Documents larger than this are skipped, not downloaded (default 50).",
+      "required": false
+    },
+    "skip_file_types": {
+      "type": "string",
+      "title": "File types to skip",
+      "description": "Comma-separated extensions or MIME types never downloaded, e.g. mp4,.mov,video/* (default video/*,audio/*; none = skip nothing).",
       "required": false
     }
   },

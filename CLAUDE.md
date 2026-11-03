@@ -25,12 +25,20 @@ is behind SAML SSO and its public API needs an admin token.
   URLs dropped, links made absolute, GFM tables), Lexical `{blocks}` via a block
   walker (its text is already Markdown). `extractLinks` classifies every link and
   gives a "View"/"ES" link the heading or document it belongs to.
-- **Documents ride the bridge's `download` verb** (`capabilities: ['fetch','download']`),
-  because `/document/link/<id>` 302s to a signed file host. The browser saves the file
-  locally and the server reads it, so this works only where both run on one machine.
-  An old pairing without `download` is *refused*, not re-prompted;
-  `mapDownloadError` turns that into the re-pair remedy. pdf.js writes warnings to
-  STDOUT (the JSON-RPC channel): `extractPdf` passes `verbosity: 0`, so keep it.
+- **Documents (`src/download.ts`)**: `/document/link/<id>` 302s to a signed URL on
+  the tenant's file host (`attachments.<apex>`), which expires in about 15 s. The
+  bridge **captures** that redirect (`capture_redirect`: arm the listener, then
+  trigger it with a page fetch, which then fails CORS as expected). The server checks
+  the type (filename from `response-content-disposition`) against
+  `WORKVIVO_SKIP_FILE_TYPES` before any request, and the size via `fetchBounded`'s
+  `Content-Length` cap before reading the body. It fetches only hosts on the tenant's
+  apex and writes with `writeUniqueFile` into `WORKVIVO_DOWNLOAD_DIR`. The fallback
+  is the browser's `download` verb, with the same rules applied to the saved file,
+  then a move. Capabilities: `['fetch','capture_redirect','download']`. An older
+  pairing is *refused*, not re-prompted; `mapDownloadError` turns that into the
+  re-pair remedy. Tests use `testPolicy()` (a temp dir) and must never touch
+  `~/Downloads`. pdf.js writes warnings to STDOUT (the JSON-RPC channel):
+  `extractPdf` passes `verbosity: 0`, so keep it.
 - **Times are UTC.** Workvivo's `YYYY-MM-DD HH:MM:SS` stamps are UTC (verified
   against `*_utc` twins); `utcIso` adds the `Z`.
 - **Fixtures are synthetic.** `tests/fixtures.ts` mirrors live shapes with invented

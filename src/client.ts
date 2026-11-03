@@ -19,11 +19,20 @@
 
 import {
   McpToolError,
+  messageOf,
   parseJsonBody,
+  splitHost,
   truncateErrorMessage,
 } from '@chrischall/mcp-utils';
+import {
+  adoptBrowserDownload,
+  readDownloadPolicy,
+  saveFromSignedUrl,
+  type DownloadOutcome,
+  type DownloadPolicy,
+} from './download.js';
 import { stat } from 'node:fs/promises';
-import type { BridgeProbeResult, BridgeStatus, DownloadResult, FetchResult, WorkvivoTransport } from './transport.js';
+import type { BridgeProbeResult, BridgeStatus, FetchResult, WorkvivoTransport } from './transport.js';
 
 /** Where a page lives: a space, or a global page collection ("page group"). */
 export type PageScope = { space_id: number } | { page_group_id: number };
@@ -130,6 +139,11 @@ export interface WorkvivoClientOptions {
   host: string | undefined;
   /** A config error found at boot, re-thrown on the first call. */
   configError?: WorkvivoConfigError;
+  /** Where/how big/which types of documents to fetch — or the error reading
+   *  that config, re-thrown on the first document read. Defaults to the env. */
+  downloadPolicy?: DownloadPolicy | Error;
+  /** Injectable fetch for the direct file download (tests). */
+  fetchImpl?: typeof fetch;
 }
 
 export class WorkvivoClient {
@@ -138,12 +152,23 @@ export class WorkvivoClient {
   private readonly configError: WorkvivoConfigError | undefined;
   private token: string | undefined;
   private tokenInFlight: Promise<string> | undefined;
-  /** Documents downloaded by this process, so a re-read does not re-download. */
-  private readonly downloads = new Map<string, DownloadResult>();
+  /** Documents saved by this process, so a re-read does not re-download. */
+  private readonly downloads = new Map<string, Extract<DownloadOutcome, { kind: 'saved' }>>();
+  private readonly downloadPolicy: DownloadPolicy | Error;
+  private readonly fetchImpl: typeof fetch | undefined;
 
   constructor(opts: WorkvivoClientOptions) {
     this.transport = opts.transport;
     this.hostValue = opts.host;
+    if (opts.downloadPolicy !== undefined) this.downloadPolicy = opts.downloadPolicy;
+    else {
+      try {
+        this.downloadPolicy = readDownloadPolicy();
+      } catch (e) {
+        this.downloadPolicy = e as Error;
+      }
+    }
+    this.fetchImpl = opts.fetchImpl;
     this.configError =
       opts.configError ??
       (opts.host ? undefined : new WorkvivoConfigError('WORKVIVO_HOST is not set.'));
@@ -221,28 +246,56 @@ export class WorkvivoClient {
     }
   }
 
+  /** Is `host` this tenant's own domain (e.g. `attachments.workvivo.us` for `acme.workvivo.us`)? */
+  isTenantHost(host: string): boolean {
+    const apex = splitHost(this.host).domain;
+    return host === apex || host.endsWith(`.${apex}`);
+  }
+
   /**
-   * Download a linked document through the browser (the link 302s to a signed
-   * file host a page fetch cannot follow). The file is saved by the browser on
-   * this machine; repeat calls in one process reuse it while it still exists.
+   * Fetch a linked document into the configured download directory, applying
+   * the type and size rules (src/download.ts). Preferred: capture the signed
+   * redirect target through the browser and fetch it here, checking type and
+   * size before any body is read. Fallback (no capture permission, no
+   * webRequest): the browser downloads it, then the same rules run on the file
+   * and it is moved into place. Saved files are reused for the process's life.
    */
-  async downloadDocument(ref: DocumentRef): Promise<DownloadResult> {
-    const url = `${this.origin}/${ref.kind === 'document' ? 'document/link' : 'file'}/${ref.id}`;
+  async downloadDocument(ref: DocumentRef): Promise<DownloadOutcome> {
+    const policy = this.downloadPolicy;
+    if (policy instanceof Error) throw policy;
+    const path = `/${ref.kind === 'document' ? 'document/link' : 'file'}/${ref.id}`;
+    const url = `${this.origin}${path}`;
     const cached = this.downloads.get(url);
     if (cached) {
       try {
         if ((await stat(cached.path)).isFile()) return cached;
       } catch {
-        // deleted since — download again
+        // deleted since — fetch again
       }
     }
-    const res = await this.transport.download({ url, timeoutMs: 120_000 });
-    // A signed-out browser downloads the sign-in page instead of the file.
-    if ((res.mime ?? '').startsWith('text/html') && res.finalUrl && this.isSignInBounce({ status: 200, body: '', url: res.finalUrl })) {
-      throw new WorkvivoSessionError(this.host, 'the document link redirected to sign-in');
+    let outcome: DownloadOutcome;
+    try {
+      const signed = await this.transport.captureSignedUrl(path);
+      // Landing on this tenant's own /saml or /login means signed out. Any
+      // other non-file host is refused by saveFromSignedUrl, which falls back
+      // to the browser download below.
+      const su = new URL(signed);
+      if (su.hostname === this.host && /^\/(saml|login)(\/|$)/.test(su.pathname)) {
+        throw new WorkvivoSessionError(this.host, 'the document link redirected to sign-in');
+      }
+      outcome = await saveFromSignedUrl(signed, policy, (h) => this.isTenantHost(h), this.fetchImpl);
+    } catch (e) {
+      if (e instanceof WorkvivoSessionError) throw e;
+      console.error(`[workvivo-mcp] direct document fetch failed (${messageOf(e)}); falling back to a browser download`);
+      const res = await this.transport.download({ url, timeoutMs: 120_000 });
+      // A signed-out browser downloads the sign-in page instead of the file.
+      if ((res.mime ?? '').startsWith('text/html') && res.finalUrl && this.isSignInBounce({ status: 200, body: '', url: res.finalUrl })) {
+        throw new WorkvivoSessionError(this.host, 'the document link redirected to sign-in');
+      }
+      outcome = await adoptBrowserDownload(res, policy);
     }
-    this.downloads.set(url, res);
-    return res;
+    if (outcome.kind === 'saved') this.downloads.set(url, outcome);
+    return outcome;
   }
 
   private isSignInBounce(res: FetchResult): boolean {

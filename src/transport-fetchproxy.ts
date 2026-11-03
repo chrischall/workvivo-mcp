@@ -30,7 +30,7 @@ export const DEFAULT_PORT = 37_149;
 export function mapDownloadError(e: unknown): unknown {
   if (classifyFetchError(messageOf(e)) !== 'capability_denied') return e;
   return new McpToolError(
-    'ContextMint Bridge has not granted workvivo-mcp permission to download documents (the pairing predates it).',
+    'ContextMint Bridge has not granted workvivo-mcp permission to read documents (the pairing predates it).',
     {
       kind: 'credential_rejected',
       cause: e,
@@ -60,8 +60,10 @@ export interface FetchproxyTransportOptions {
 
 export class FetchproxyTransport implements WorkvivoTransport {
   private readonly inner: FetchproxyVerbTransport;
+  private readonly host: string | undefined;
 
   constructor(opts: FetchproxyTransportOptions) {
+    this.host = opts.host;
     const { domain, subdomain } = splitHost(opts.host ?? 'workvivo.com');
     this.inner = createFetchproxyTransport<FetchproxyVerbTransport>({
       port: opts.port ?? DEFAULT_PORT,
@@ -69,10 +71,12 @@ export class FetchproxyTransport implements WorkvivoTransport {
       version: opts.version,
       logListening: true,
       domains: [domain],
-      // `download` reads linked documents (/document/link/<id>), which 302 to
-      // a signed file host a page fetch cannot follow. Declared at pair time:
-      // adding it to an existing pairing forces one re-approval.
-      capabilities: ['fetch', 'download'],
+      // Linked documents (/document/link/<id>) 302 to a signed file host a page
+      // fetch cannot follow. `capture_redirect` reads that signed URL so the
+      // server can check and fetch the file itself; `download` is the fallback
+      // (the browser saves it). Declared at pair time — an existing pairing
+      // without them is REFUSED (not re-prompted) until re-approved.
+      capabilities: ['fetch', 'capture_redirect', 'download'],
       ...(subdomain ? { defaultSubdomain: subdomain } : {}),
       ...(opts.fetchTimeoutMs !== undefined ? { fetchTimeoutMs: opts.fetchTimeoutMs } : {}),
     });
@@ -113,6 +117,24 @@ export class FetchproxyTransport implements WorkvivoTransport {
     }
     log('download', { url: opts.url, bytes: res.bytes, mime: res.mime, ms: Date.now() - started });
     return res;
+  }
+
+  async captureSignedUrl(path: string): Promise<string> {
+    if (!this.host) throw new Error('WORKVIVO_HOST is not set.');
+    // Arm the one-shot redirect listener, then make the browser request the
+    // link. The page fetch itself fails (the file host sends no CORS headers)
+    // — that is expected; the listener has the redirect target by then.
+    const captured = this.inner.server.captureRedirect({ host: this.host, path, timeoutMs: 20_000 });
+    captured.catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 300));
+    this.inner.fetch({ method: 'GET', path }).catch(() => undefined);
+    try {
+      const url = await captured;
+      log('captureSignedUrl', { path, host: new URL(url).host });
+      return url;
+    } catch (e) {
+      throw mapDownloadError(e);
+    }
   }
 
   async runProbe(fetchFn: (path: string) => Promise<unknown>, probePath: string): Promise<BridgeProbeResult> {

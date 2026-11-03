@@ -31,8 +31,8 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
           'its page tree, EVERY page\'s full content as Markdown, an index of every document and link those pages ' +
           'point to (with the document_id for workvivo_get_document), the space\'s document library and useful ' +
           'links, upcoming events, and its most recent posts. Set `include_documents: true` to also download and ' +
-          'extract the text of the linked documents (capped by `max_documents`/`max_document_chars`; the browser ' +
-          'saves them in its download folder on this machine). Edits nothing in Workvivo (opening documents may be recorded as views, as in the browser).',
+          'extract the text of the linked documents (capped by `max_documents`/`max_document_chars`; files are ' +
+          'saved in WORKVIVO_DOWNLOAD_DIR, and oversized or skipped types are listed, not fetched). Edits nothing in Workvivo (opening documents may be recorded as views, as in the browser).',
       ),
       annotations: toolAnnotations({
         title: 'Digest a whole Workvivo space',
@@ -227,6 +227,7 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
         const results = await mapWithConcurrency(targets, 2, async (d) => {
           const r = await section(async () => {
             const file = await client.downloadDocument({ kind: 'document', id: d.document_id! });
+            if (file.kind === 'skipped') return { format: 'unsupported' as const, note: `Not downloaded: ${file.reason}.` };
             return extractDocument(file.path, file.mime, origin);
           });
           return { d, r };

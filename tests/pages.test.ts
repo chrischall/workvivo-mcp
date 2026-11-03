@@ -172,32 +172,48 @@ describe('workvivo_get_document', () => {
     expect(h.transport.downloadCalls).toHaveLength(1);
   });
 
-  it('downloads again when the cached file is gone', async () => {
-    const path = join(dir, 'Gone.txt');
-    writeFileSync(path, 'hello');
+  it('downloads again when the saved file is gone', async () => {
     h = await harnessFor();
-    h.transport.downloads[`https://${HOST}/file/9`] = { path, bytes: 5, mime: 'text/plain' };
-    await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { url: `https://${HOST}/file/9` } });
-    rmSync(path);
-    writeFileSync(join(dir, 'Gone2.txt'), 'again');
-    h.transport.downloads[`https://${HOST}/file/9`] = { path: join(dir, 'Gone2.txt'), bytes: 5, mime: 'text/plain' };
+    const src = (n: string) => {
+      const p = join(dir, n);
+      writeFileSync(p, 'again');
+      return p;
+    };
+    h.transport.downloads[`https://${HOST}/file/9`] = { path: src('Gone.txt'), bytes: 5, mime: 'text/plain' };
+    const first = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { url: `https://${HOST}/file/9` } }));
+    const saved = /saved_to: "([^"]+)"/.exec(first)![1]!;
+    rmSync(saved);
+    h.transport.downloads[`https://${HOST}/file/9`] = { path: src('Gone2.txt'), bytes: 5, mime: 'text/plain' };
     const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { url: `https://${HOST}/file/9` } });
     expect(textOf(r)).toContain('again');
     expect(h.transport.downloadCalls).toHaveLength(2);
   });
 
-  it('reports the saved path for a type it cannot read, and a sign-in bounce as signed out', async () => {
+  it('saves into the configured folder, reports the path for a type it cannot read, and a sign-in bounce as signed out', async () => {
     const deck = join(dir, 'Deck.pptx');
     writeFileSync(deck, 'PK');
     h = await harnessFor();
     h.transport.downloads[`https://${HOST}/document/link/1`] = { path: deck, bytes: 2 };
     h.transport.downloads[`https://${HOST}/document/link/2`] = { path: join(dir, 'login.html'), bytes: 9, mime: 'text/html', finalUrl: 'https://sso.example.com/idp' };
-    const r1 = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 1 } });
-    expect(textOf(r1)).toContain(`saved_to: "${deck}"`);
-    expect(textOf(r1)).toMatch(/open the saved file/);
+    const r1 = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 1 } }));
+    const saved = /saved_to: "([^"]+)"/.exec(r1)![1]!;
+    expect(saved.endsWith('/Deck.pptx')).toBe(true);
+    expect(saved).not.toBe(deck);
+    expect(r1).toMatch(/open the saved file/);
     const r2 = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 2 } });
     expect(isError(r2)).toBe(true);
     expect(textOf(r2)).toMatch(/Not signed in to Workvivo/);
+  });
+
+  it('reports a skipped document (video) without downloading it', async () => {
+    h = await harnessFor();
+    h.transport.captures['/document/link/3'] =
+      'https://attachments.workvivo.us/u/x.mp4?response-content-disposition=' + encodeURIComponent('filename="Town Hall.mp4"') + '&Signature=S';
+    const t = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 3 } }));
+    expect(t).toContain('skipped: true');
+    expect(t).toContain('name: "Town Hall.mp4"');
+    expect(t).toMatch(/Not downloaded: file type matches WORKVIVO_SKIP_FILE_TYPES rule "video\/\*"/);
+    expect(h.transport.downloadCalls).toEqual([]);
   });
 });
 

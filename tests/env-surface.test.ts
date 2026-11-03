@@ -14,6 +14,9 @@ const EXPECTED: Record<string, boolean> = {
   WORKVIVO_HOST: true,
   WORKVIVO_WS_PORT: false,
   WORKVIVO_DEBUG: false,
+  WORKVIVO_DOWNLOAD_DIR: false,
+  WORKVIVO_MAX_DOWNLOAD_MB: false,
+  WORKVIVO_SKIP_FILE_TYPES: false,
 };
 
 describe('env surface', () => {
