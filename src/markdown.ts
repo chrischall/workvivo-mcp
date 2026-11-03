@@ -24,7 +24,7 @@ const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 
 /** A signed media URL is a short-lived credential and useless once expired. */
-function isSignedUrl(src: string): boolean {
+export function isSignedUrl(src: string): boolean {
   return /[?&](Signature|X-Amz-Signature|Expires|Key-Pair-Id)=/i.test(src);
 }
 
