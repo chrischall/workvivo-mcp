@@ -10,6 +10,7 @@ import { registerPeopleTools } from '../src/tools/people.js';
 import { registerSpaceTools } from '../src/tools/spaces.js';
 import { registerNotificationTools } from '../src/tools/notifications.js';
 import { registerSearchTools } from '../src/tools/search.js';
+import { registerQuestionTools } from '../src/tools/questions.js';
 import { registerRawTools } from '../src/tools/raw.js';
 
 export const HOST = 'acme.workvivo.us';
@@ -46,7 +47,10 @@ export class StubTransport implements WorkvivoTransport {
       return { status: 404, body: '{"message":""}', url };
     }
     const r = typeof route === 'function' ? (route as Handler)(init) : route;
-    if (r && typeof r === 'object' && ('status' in (r as object) || 'body' in (r as object) || 'url' in (r as object))) {
+    // A raw response is an object whose keys are ONLY status/body/url — a
+    // Workvivo record can itself have a `body` field (question posts do).
+    const keys = r && typeof r === 'object' && !Array.isArray(r) ? Object.keys(r) : [];
+    if (keys.length > 0 && keys.every((k) => k === 'status' || k === 'body' || k === 'url')) {
       const fr = r as Partial<FetchResult>;
       return { status: fr.status ?? 200, body: fr.body ?? '', url: fr.url ?? url };
     }
@@ -74,6 +78,7 @@ export const ALL_REGISTRARS = [
   registerSpaceTools,
   registerNotificationTools,
   registerSearchTools,
+  registerQuestionTools,
   registerRawTools,
 ];
 

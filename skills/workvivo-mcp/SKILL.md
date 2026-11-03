@@ -22,6 +22,7 @@ RSVPs.
   - `article` → `workvivo_get_article`
   - `update` / `kudos` → `workvivo_get_post`
   - `event` → `workvivo_get_event`
+  - `question_post` / `question-post` → `workvivo_get_question` (with its answers)
   - `user` → `workvivo_get_person`
   - `space` → `workvivo_get_space`
   - Comments on any of update, article, event or kudos → `workvivo_get_comments`.

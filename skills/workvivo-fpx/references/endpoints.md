@@ -60,6 +60,16 @@ wv_get comments/article/7001 | jq '[.[] | {id, parent: .parent_comment_id, user_
 wv_get likedby/update/5001                                   # {"default":[names…]}
 ```
 
+## Q&A (question posts)
+
+```sh
+wv_get question-posts/4001 | jq '{id, title, by: .user.full_name, at: .created_at, answered, answers_count, text: (.body | gsub("<[^>]*>"; ""))}'
+wv_get 'question-posts/4001/answers?page=1' | jq '{next: .next_page_url, answers: [.data[] | {id, by: .user.full_name, accepted, votes, text: (.body | gsub("<[^>]*>"; ""))}]}'
+```
+
+The GETs don't count a view (the app does that with a separate POST). Question posts
+have answers, not comments — `comments/question-post/<id>` is a 404.
+
 `comments/<type>/<id>` takes `update`, `article`, `event`, `kudos`, … (the type from
 the item's `url`). Comments carry `user_id` only — resolve a name with
 `wv_get people/<user_id> | jq .full_name`.

@@ -1,9 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkvivoClient } from '../client.js';
-import { notification } from '../project.js';
+import { listOf, notification } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
-import { listOf } from './news.js';
 import { pageArg, readAnnotations } from './common.js';
 
 export function registerNotificationTools(server: McpServer, client: WorkvivoClient): void {

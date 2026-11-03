@@ -1,23 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkvivoClient } from '../client.js';
-import { articleDetail, articleSummary, nextPage } from '../project.js';
+import { articleDetail, articleSummary, listOf } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
-
-type Rec = Record<string, unknown>;
-
-/** A Laravel page of records → `{ items, next_page }`; a bare array → `{ items }`. */
-export function listOf(project: (r: unknown) => unknown) {
-  return (data: unknown): unknown => {
-    if (Array.isArray(data)) return { items: data.map(project) };
-    const page = (data ?? {}) as Rec;
-    const items = Array.isArray(page.data) ? page.data.map(project) : undefined;
-    if (!items) return undefined; // not a page — projectOrRaw falls back to the raw value
-    const next = nextPage(page);
-    return next !== undefined ? { items, next_page: next } : { items };
-  };
-}
 
 export function registerNewsTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(

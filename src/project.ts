@@ -200,6 +200,20 @@ export function nextPage(page: Rec): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
+// ---------------------------------------------------------------- lists
+
+/** A Laravel page of records → `{ items, next_page }`; a bare array → `{ items }`. */
+export function listOf(project: (r: unknown) => unknown) {
+  return (data: unknown): unknown => {
+    if (Array.isArray(data)) return { items: data.map(project) };
+    const page = (isRec(data) ? data : {}) as Rec;
+    const items = Array.isArray(page.data) ? page.data.map(project) : undefined;
+    if (!items) return undefined; // not a page — projectOrRaw falls back to the raw value
+    const next = nextPage(page);
+    return next !== undefined ? { items, next_page: next } : { items };
+  };
+}
+
 // ---------------------------------------------------------------- news
 
 export function articleSummary(a: unknown): Rec {
@@ -263,6 +277,41 @@ export function comment(c: unknown, names: Map<number, string>): Rec {
     at: utcIso(c.created_at),
     text: itemText(c),
     likes: num(c.likes_count),
+  });
+}
+
+// ---------------------------------------------------------------- Q&A
+
+/** A question post (Q&A). Answers come from a separate endpoint. */
+export function question(q: unknown): Rec {
+  if (!isRec(q)) return {};
+  const accepted = isRec(q.accepted_answer) ? num(q.accepted_answer.id) : undefined;
+  return prune({
+    id: num(q.id),
+    title: str(q.title),
+    text: str(q.body) ? htmlToReadableText(q.body as string) : itemText(q),
+    at: utcIso(q.created_at),
+    ...authorOf(q),
+    answered: bool(q.answered),
+    answers_count: num(q.answers_count),
+    accepted_answer_id: accepted,
+    votes: num(q.votes),
+    views: num(q.views_count),
+    spaces: spaceNames(q.spaces).length ? spaceNames(q.spaces) : undefined,
+    url: str(q.relative_permalink),
+  });
+}
+
+export function answer(a: unknown): Rec {
+  if (!isRec(a)) return {};
+  return prune({
+    id: num(a.id),
+    at: utcIso(a.created_at),
+    ...authorOf(a),
+    text: str(a.body) ? htmlToReadableText(a.body as string) : itemText(a),
+    accepted: bool(a.accepted) || undefined,
+    votes: num(a.votes),
+    comments: num(a.comments_count),
   });
 }
 
@@ -335,7 +384,7 @@ export function searchHit(h: unknown): Rec {
     id: num(h.id) ?? str(h.id),
     title: stripTags(h.title),
     url: str(h.url),
-    updated_at: str(h.updated_at),
+    updated_at: utcIso(h.updated_at),
     by: str(details.author),
     ...(snippet ? clip(snippet, 300) : {}),
   });

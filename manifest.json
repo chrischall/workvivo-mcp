@@ -89,6 +89,10 @@
       "description": "Read the comments on a post, article, event or shoutout, with commenter names"
     },
     {
+      "name": "workvivo_get_question",
+      "description": "Read a Q&A question with its answers, votes and the accepted answer"
+    },
+    {
       "name": "workvivo_list_events",
       "description": "List upcoming events — times in UTC, location, RSVP state"
     },

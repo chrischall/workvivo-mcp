@@ -1,9 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { WorkvivoApiError, type WorkvivoClient } from '../client.js';
-import { space } from '../project.js';
+import { listOf, space } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
-import { listOf } from './news.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
 
 export function registerSpaceTools(server: McpServer, client: WorkvivoClient): void {
