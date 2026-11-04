@@ -67,7 +67,9 @@ On a host that serves context groups (mcp-host), every tool here except
 - No canonical read takes a subject — Workvivo has no listable set of people
   or accounts to pick between (spaces are places, not subjects).
 - Brief lines arrive in the untrusted-data envelope (`data: string[]`), with
-  `-- ` note lines for `-- none`, `-- more` and `-- N of M shown`.
+  `-- ` note lines for `-- none`, `-- more` and `-- N of M shown`. A title
+  that itself starts with `-- ` or `\` is escaped with one leading `\`, and
+  each line is cut to 120 characters as a whole, title first.
 
 A compound ask looks like "anything new at work, and what's on this week?" —
 the host answers both halves from these two reads beside the group's other

@@ -200,6 +200,35 @@ describe('view: brief', () => {
     expect(linesOf(result)).toEqual(['-- none']);
   });
 
+  it('escapes a title that starts with "-- " or "\\" with one backslash, so it never reads as a note', async () => {
+    const page = {
+      data: [
+        { id: 'e1', read_at: null, created_at: '2026-11-02 10:00:00', data: { title: '-- none' } },
+        { id: 'e2', read_at: null, created_at: '2026-11-02 10:00:00', data: { title: '\\server\\share moved' } },
+        { id: 'e3', read_at: null, created_at: '2026-11-02 10:00:00', data: { title: '--no space is fine' } },
+      ],
+      next_page_url: null,
+    };
+    const { result } = await call({ '/api/notifications': page }, 'workvivo_list_notifications');
+    expect(linesOf(result)).toEqual([
+      '\\-- none — 2026-11-02T10:00:00Z — unread',
+      '\\\\server\\share moved — 2026-11-02T10:00:00Z — unread',
+      '--no space is fine — 2026-11-02T10:00:00Z — unread',
+    ]);
+  });
+
+  it('cuts each line to 120 chars as a WHOLE, title first, even when the date is not ISO', async () => {
+    const page = {
+      data: [{ id: 8009, title: 'Long '.repeat(40), scheduled_at_utc: 'sometime '.repeat(20), is_going: true }],
+      next_page_url: null,
+    };
+    const { result } = await call({ '/api/events/listings': page }, 'workvivo_list_events');
+    const [l] = linesOf(result);
+    expect(l.length).toBeLessThanOrEqual(120);
+    expect(l.startsWith('Long')).toBe(true);
+    expect(l).toMatch(/ — going$/);
+  });
+
   it('other rungs are unchanged (compact still the default)', async () => {
     b = await harnessFor({ '/api/events/listings': { data: [fx.event], next_page_url: null } });
     const result = await b.harness.client.callTool({ name: 'workvivo_list_events', arguments: {} });
