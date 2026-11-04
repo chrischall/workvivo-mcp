@@ -1,7 +1,7 @@
 {
   "name": "workvivo-mcp",
   "displayName": "Workvivo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Read-only Workvivo for Claude — feed, news, events, people, spaces and search through your signed-in session",
   "author": {
     "name": "Chris Hall",

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/chrischall/workvivo-mcp/compare/v0.2.0...v0.3.0) (2026-11-04)
+
+
+### Features
+
+* context-group hints ([#9](https://github.com/chrischall/workvivo-mcp/issues/9)) ([edf7b89](https://github.com/chrischall/workvivo-mcp/commit/edf7b89a7c751651914a726c567d5a73649522a4))
+
+
+### Bug Fixes
+
+* **brief:** align the brief view with the fleet contract ([#11](https://github.com/chrischall/workvivo-mcp/issues/11)) ([fccea53](https://github.com/chrischall/workvivo-mcp/commit/fccea53bae13ca0cac670686702f7ef26bc76a18))
+
 ## [0.2.0](https://github.com/chrischall/workvivo-mcp/compare/v0.1.0...v0.2.0) (2026-11-03)
 
 
