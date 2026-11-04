@@ -69,7 +69,11 @@ comments, RSVPs or marks anything read.
 
 Read tools return a compact projection by default. Pass `view: "full"` for Workvivo's
 record as sent. Credential-shaped fields, such as meeting passcodes and realtime
-tokens, are redacted in every view. Note that `workvivo_search` adds the query to your
+tokens, are redacted in every view. `workvivo_list_notifications` and
+`workvivo_list_events` also take `view: "brief"` — one line per item
+(`title — <UTC time | no date> — <status>`, at most 120 characters) in the
+untrusted-data envelope, with `-- ` note lines for an empty or partial page — and
+carry context-group hints (`_meta.mint`, group `work`) for hosts that read them. Note that `workvivo_search` adds the query to your
 own Workvivo search history.
 
 **Documents** (`workvivo_get_document`, and `workvivo_digest_space` with

@@ -20,7 +20,14 @@ is behind SAML SSO and its public API needs an admin token.
 - **Redaction on every rung.** `redactSensitive` (src/project.ts) runs on both
   `compact` and `full`, because events carry `zoom_webinar_password` and `user`
   carries realtime/analytics tokens. Compact projections are allowlists, so
-  phones and birthdays never leave `workvivo_get_person` compact.
+  phones and birthdays never leave `workvivo_get_person` compact. The `brief`
+  rung (src/brief.ts, the two canonical reads only) is built from those same
+  allowlist projections — title, time and read/RSVP state — so it carries no
+  field redaction would have to remove.
+- **Context-group hints** (`src/tools/hints.ts`): every tool but the healthcheck
+  carries `_meta.mint` with domain `work`; `tests/mint-hints.test.ts` holds the
+  intent table, so a new tool fails it until it declares one. Canonical:
+  notifications (whats-new) and events (whats-on); no subject (nothing listable).
 - **Pages → Markdown** (`src/markdown.ts`): TinyMCE HTML via turndown (signed media
   URLs dropped, links made absolute, GFM tables), Lexical `{blocks}` via a block
   walker (its text is already Markdown). `extractLinks` classifies every link and

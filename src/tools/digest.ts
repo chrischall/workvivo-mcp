@@ -7,6 +7,7 @@ import { extractLinks, htmlToMarkdown, isSignedUrl, rebaseHeadings, type Extract
 import { event, feedEntry, flattenTree, pageMarkdown, pageTree, space, type PageNode } from '../project.js';
 import { markdownResult, untrustedDescription } from '../view.js';
 import { idArg } from './common.js';
+import { LOOKUP } from './hints.js';
 
 type Rec = Record<string, unknown>;
 
@@ -34,6 +35,7 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
           'extract the text of the linked documents (capped by `max_documents`/`max_document_chars`; files are ' +
           'saved in WORKVIVO_DOWNLOAD_DIR, and oversized or skipped types are listed, not fetched). Edits nothing in Workvivo (opening documents may be recorded as views, as in the browser).',
       ),
+      _meta: LOOKUP,
       annotations: toolAnnotations({
         title: 'Digest a whole Workvivo space',
         readOnly: false, // include_documents saves files locally

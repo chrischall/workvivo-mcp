@@ -5,6 +5,7 @@ import { redactSensitive } from '../project.js';
 import { untrustedDescription, WV_UNTRUSTED_NOTE } from '../view.js';
 import { untrustedResult } from '@chrischall/mcp-utils';
 import { readAnnotations } from './common.js';
+import { workMeta } from './hints.js';
 
 /** A relative `/api/` path: segments, then an optional query. No `..`, no scheme, no host. */
 const PATH_RE = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.,-]+)*\/?(?:\?[A-Za-z0-9_.,~%=&+:-]*)?$/;
@@ -50,6 +51,7 @@ export function registerRawTools(server: McpServer, client: WorkvivoClient): voi
           '(update-last-visited, export, download, toggles…) are refused. Responses can be large — prefer the ' +
           'dedicated tools. Read-only.',
       ),
+      _meta: workMeta('other'),
       annotations: readAnnotations('GET a Workvivo API path'),
       inputSchema: z.object({
         path: z.string().min(1).max(500).describe('Path relative to /api/, with an optional query string.'),

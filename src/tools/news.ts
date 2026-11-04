@@ -4,6 +4,7 @@ import type { WorkvivoClient } from '../client.js';
 import { articleDetail, articleSummary, listOf } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
+import { LOOKUP, workMeta } from './hints.js';
 
 export function registerNewsTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(
@@ -15,6 +16,7 @@ export function registerNewsTools(server: McpServer, client: WorkvivoClient): vo
           'publish time, author, spaces and comment counts. Pass `space_id` for one space\'s news, or ' +
           '`featured: true` for the currently featured stories. Read one in full with workvivo_get_article. Read-only.',
       ),
+      _meta: workMeta('whats-new', { aliases: ['company news', 'newsroom', 'news articles', 'announcements'] }),
       annotations: readAnnotations('List Workvivo news articles'),
       inputSchema: z.object({
         space_id: idArg('space').optional().describe('Only this space\'s published news.'),
@@ -43,6 +45,7 @@ export function registerNewsTools(server: McpServer, client: WorkvivoClient): vo
           'as plain text. Take the id from workvivo_list_news, the feed, or search (`news/<id>`). Its comments: ' +
           'workvivo_get_comments with type "article". Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo news article'),
       inputSchema: z.object({
         article_id: idArg('article'),

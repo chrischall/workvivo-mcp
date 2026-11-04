@@ -2,7 +2,9 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkvivoClient } from '../client.js';
 import { listOf, notification } from '../project.js';
-import { respond, untrustedDescription, viewArg } from '../view.js';
+import { briefLine, briefResult } from '../brief.js';
+import { briefViewArg, respond, untrustedDescription } from '../view.js';
+import { workMeta } from './hints.js';
 import { pageArg, readAnnotations } from './common.js';
 
 export function registerNotificationTools(server: McpServer, client: WorkvivoClient): void {
@@ -16,13 +18,28 @@ export function registerNotificationTools(server: McpServer, client: WorkvivoCli
           'also carries your unread counts. Listing does not mark anything read (verified). Read-only.',
       ),
       annotations: readAnnotations('List your Workvivo notifications'),
+      _meta: workMeta('whats-new', {
+        canonical: true,
+        aliases: ['notifications', 'mentions', 'intranet', 'workvivo', 'anything new at work'],
+      }),
       inputSchema: z.object({
         page: pageArg,
-        view: viewArg('read state, time, kind, title and target item per notification, plus unread counts'),
+        view: briefViewArg(
+          'read state, time, kind, title and target item per notification, plus unread counts',
+          '"<title> — <UTC time> — <unread|read>"',
+        ),
       }),
     },
     async ({ page, view }) => {
       const p = page ?? 1;
+      if (view === 'brief') {
+        const list = await client.get('notifications', { page: p });
+        return briefResult(list, (n) => {
+          const x = notification(n);
+          const title = typeof x.title === 'string' ? x.title : typeof x.kind === 'string' ? x.kind : undefined;
+          return briefLine(title, typeof x.at === 'string' ? x.at : undefined, x.read ? 'read' : 'unread');
+        });
+      }
       const [list, unread] = await Promise.all([
         client.get('notifications', { page: p }),
         p === 1 ? client.get('notifications/unread') : Promise.resolve(undefined),

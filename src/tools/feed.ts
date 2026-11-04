@@ -4,6 +4,7 @@ import { WorkvivoApiError, type WorkvivoClient } from '../client.js';
 import { feedPage } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
+import { workMeta } from './hints.js';
 
 export function registerFeedTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(
@@ -18,6 +19,7 @@ export function registerFeedTools(server: McpServer, client: WorkvivoClient): vo
           'workvivo_get_post (update/kudos), workvivo_get_article (article) or workvivo_get_event (event), and ' +
           'read its comments with workvivo_get_comments. Read-only.',
       ),
+      _meta: workMeta('whats-new', { aliases: ['intranet feed', 'company feed', 'updates', 'posts'] }),
       annotations: readAnnotations('Read the Workvivo feed'),
       inputSchema: z.object({
         space_id: idArg('space').optional().describe('Read this space\'s feed instead of your home feed.'),

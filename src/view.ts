@@ -8,6 +8,7 @@ import {
   type View,
 } from '@chrischall/mcp-utils';
 import type { CallToolResult } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 import { redactSensitive } from './project.js';
 
 /**
@@ -64,3 +65,17 @@ export function respond(
   const shaped = rung === 'compact' ? projectOrRaw(data, project, { label: 'workvivo-mcp', context }) : data;
   return untrustedResult(redactSensitive(shaped), { note: WV_UNTRUSTED_NOTE });
 }
+
+/** The rungs of a canonical read: the usual two plus `brief` (src/brief.ts). */
+export const BRIEF_VIEWS = [...VIEWS, 'brief'] as const;
+
+/** The `view` parameter of a canonical read, naming what its brief line holds. */
+export const briefViewArg = (compactKeeps: string, briefLine: string) =>
+  z
+    .enum(BRIEF_VIEWS)
+    .optional()
+    .describe(
+      `compact (default) keeps ${compactKeeps}; "full" returns Workvivo's record as sent ` +
+        '(credential-shaped fields such as meeting passcodes are redacted on every view); "brief" returns one ' +
+        `line per item, ${briefLine}, plus "-- " note lines ("-- none", "-- more", "-- N of M shown").`,
+    );
