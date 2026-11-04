@@ -4,6 +4,7 @@ import { WorkvivoApiError, type WorkvivoClient } from '../client.js';
 import { listOf, space } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
+import { LOOKUP } from './hints.js';
 
 export function registerSpaceTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(
@@ -17,6 +18,7 @@ export function registerSpaceTools(server: McpServer, client: WorkvivoClient): v
           'a space with workvivo_get_space, its feed with workvivo_get_feed, its news with workvivo_list_news ' +
           'or its events with workvivo_list_events. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('List Workvivo spaces'),
       inputSchema: z.object({
         scope: z.enum(['mine', 'all', 'trending']).optional().describe('Which spaces (default "mine"; ignored when `query` is set).'),
@@ -50,6 +52,7 @@ export function registerSpaceTools(server: McpServer, client: WorkvivoClient): v
         "Read one Workvivo space's details: name, full description, member count, whether you are a member, " +
           'privacy and last activity. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo space'),
       inputSchema: z.object({
         space_id: idArg('space'),

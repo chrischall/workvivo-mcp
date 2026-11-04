@@ -4,6 +4,7 @@ import type { WorkvivoClient } from '../client.js';
 import { listOf, me, person, personDetail } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
+import { LOOKUP, workMeta } from './hints.js';
 
 export function registerPeopleTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(
@@ -15,6 +16,7 @@ export function registerPeopleTools(server: McpServer, client: WorkvivoClient): 
           'title, department, location and work email for each person, plus the directory total. Open a ' +
           'profile with workvivo_get_person. Read-only.',
       ),
+      _meta: workMeta('lookup', { aliases: ['colleague', 'coworker', 'who is', 'directory'] }),
       annotations: readAnnotations('Search the Workvivo people directory'),
       inputSchema: z.object({
         query: z.string().trim().min(1).max(200).optional().describe('Name (or part of one) to search for.'),
@@ -47,6 +49,7 @@ export function registerPeopleTools(server: McpServer, client: WorkvivoClient): 
           'number of direct reports, bio, expertise and interests. Take the id from workvivo_search_people, a ' +
           'feed entry (`by_id`) or a comment (`user_id`). Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo profile'),
       inputSchema: z.object({
         person_id: idArg('person'),
@@ -66,6 +69,7 @@ export function registerPeopleTools(server: McpServer, client: WorkvivoClient): 
       description:
         'Read who you are signed in to Workvivo as: name, email, job title, department, location, cost ' +
         'centre, hire date, timezone and roles. Read-only.',
+      _meta: LOOKUP,
       annotations: readAnnotations('Read your own Workvivo account'),
       inputSchema: z.object({
         view: viewArg('your identity, role and org placement (the raw record is ~80 KB of org settings)'),
@@ -84,6 +88,7 @@ export function registerPeopleTools(server: McpServer, client: WorkvivoClient): 
       description:
         'List the people on your team in Workvivo (as the directory defines it — your manager and peers or ' +
         'your reports): name, job title, department, location and email. Read-only.',
+      _meta: workMeta('lookup', { aliases: ['my team', 'my manager', 'reports'] }),
       annotations: readAnnotations('List your Workvivo team'),
       inputSchema: z.object({
         view: viewArg('id, name, job title, department, location and email per person'),

@@ -4,6 +4,7 @@ import type { WorkvivoClient } from '../client.js';
 import { searchHit } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { pageArg, readAnnotations } from './common.js';
+import { workMeta } from './hints.js';
 
 /** Federated-search content types the server accepts (an unknown one is a 422). */
 export const SEARCH_TYPES = [
@@ -42,6 +43,7 @@ export function registerSearchTools(server: McpServer, client: WorkvivoClient): 
           'Narrow with `types` (e.g. ["article","event"]). Open a hit by its type and id with the matching get ' +
           'tool. Read-only, but Workvivo records the query in your own search history.',
       ),
+      _meta: workMeta('lookup', { aliases: ['search the intranet', 'search workvivo'] }),
       annotations: readAnnotations('Search Workvivo'),
       inputSchema: z.object({
         query: z.string().trim().min(1).max(500).describe('What to search for.'),

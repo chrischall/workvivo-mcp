@@ -6,6 +6,7 @@ import { extractLinks, rebaseHeadings, type ExtractedLink } from '../markdown.js
 import { pageMarkdown, pageMeta, pageTree, flattenTree, redactSensitive } from '../project.js';
 import { markdownResult, untrustedDescription, WV_UNTRUSTED_NOTE } from '../view.js';
 import { idArg, readAnnotations } from './common.js';
+import { LOOKUP } from './hints.js';
 
 const scopeArgs = {
   space_id: idArg('space').optional().describe('The space whose pages to read (from a `spaces/<id>/pages/…` URL).'),
@@ -51,6 +52,7 @@ export function registerPageTools(server: McpServer, client: WorkvivoClient): vo
           'a tree: each page\'s id, title and slug, with its child pages nested. Read any of them with ' +
           'workvivo_get_page. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('List the pages of a Workvivo space'),
       inputSchema: z.object({ ...scopeArgs }),
     },
@@ -77,6 +79,7 @@ export function registerPageTools(server: McpServer, client: WorkvivoClient): vo
           'the page — linked pages (read with this tool) and linked documents (read with ' +
           'workvivo_get_document). `format: "json"` returns the same as structured data. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo page as Markdown'),
       inputSchema: z.object({
         ...scopeArgs,

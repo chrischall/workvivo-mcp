@@ -4,6 +4,7 @@ import type { WorkvivoClient } from '../client.js';
 import { answer, nextPage, question } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
+import { LOOKUP } from './hints.js';
 
 export function registerQuestionTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(
@@ -15,6 +16,7 @@ export function registerQuestionTools(server: McpServer, client: WorkvivoClient)
           'with its answers: who asked, the question text, whether it is answered, and each answer\'s author, ' +
           'text, votes and whether it is the accepted one. Reading does not count a view. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo Q&A question and its answers'),
       inputSchema: z.object({
         question_id: idArg('question'),

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { WorkvivoApiError, type DocumentRef, type WorkvivoClient } from '../client.js';
 import { extractDocument, windowOf } from '../documents.js';
 import { markdownResult, untrustedDescription } from '../view.js';
+import { workMeta } from './hints.js';
 
 /** Accept a document id, or a `/document/link/<id>` / `/file/<id>` URL or path. */
 export function documentRefOf(args: { document_id?: number; url?: string }, host: string): DocumentRef {
@@ -42,6 +43,7 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
           '~/Downloads/workvivo-mcp; repeat reads reuse it). Files over WORKVIVO_MAX_DOWNLOAD_MB (default 50) and ' +
           'types in WORKVIVO_SKIP_FILE_TYPES (default video and audio) are skipped without downloading. Long documents page with `offset`/`max_chars`. Edits nothing in Workvivo, though like opening it in the browser, Workvivo may record the view.',
       ),
+      _meta: workMeta('other'),
       annotations: toolAnnotations({
         title: 'Read a Workvivo document',
         readOnly: false,

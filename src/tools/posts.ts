@@ -5,6 +5,7 @@ import type { WorkvivoClient } from '../client.js';
 import { comment, listOf, person, post } from '../project.js';
 import { respond, untrustedDescription, viewArg } from '../view.js';
 import { idArg, pageArg, readAnnotations } from './common.js';
+import { LOOKUP, workMeta } from './hints.js';
 
 /** Comment-bearing item types — each verified live against `comments/<type>/<id>`. */
 export const COMMENTABLE = ['update', 'article', 'event', 'kudos'] as const;
@@ -22,6 +23,7 @@ export function registerPostTools(server: McpServer, client: WorkvivoClient): vo
           'thanks or mentions, and like/comment counts. Take `type` and `id` from a feed entry or search ' +
           'result (`comments/update/<id>`, `comments/kudos/<id>`). Its comments: workvivo_get_comments. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo post or shoutout'),
       inputSchema: z.object({
         type: z.enum(['update', 'kudos']).describe('"update" for a post, "kudos" for a shoutout.'),
@@ -43,6 +45,7 @@ export function registerPostTools(server: McpServer, client: WorkvivoClient): vo
         'List recent shoutouts (kudos — public thank-yous and recognition) across Workvivo, newest first: who ' +
           'gave it, who it thanks, and the message. Read-only.',
       ),
+      _meta: workMeta('whats-new', { aliases: ['shoutouts', 'kudos', 'recognition', 'thank yous'] }),
       annotations: readAnnotations('List Workvivo shoutouts'),
       inputSchema: z.object({
         page: pageArg,
@@ -64,6 +67,7 @@ export function registerPostTools(server: McpServer, client: WorkvivoClient): vo
           "commenter's name, time, text and likes (`reply_to` links a reply to its parent comment). Take " +
           '`type` and `id` from a feed entry, list or search result. Read-only.',
       ),
+      _meta: LOOKUP,
       annotations: readAnnotations('Read comments on a Workvivo item'),
       inputSchema: z.object({
         type: z.enum(COMMENTABLE).describe('The item type: update (a post), article, event or kudos (a shoutout).'),
