@@ -88,7 +88,22 @@ and it is moved into `WORKVIVO_DOWNLOAD_DIR`. This needs a pairing that includes
 `capture_redirect` and `download` permissions. If you paired an earlier version,
 remove workvivo-mcp in the ContextMint Bridge popup and approve the new pair code.
 
+Documents can't be read on a **hosted** server (mcp-host) yet. The file host is
+outside the server's allowed network hosts, and the browser bridge can't return file
+contents. `workvivo_get_document` refuses with that reason before making any request,
+and `workvivo_digest_space` lists each linked document as not fetched while returning
+the rest of the space. Use a local install to read documents.
+
 The endpoints and their quirks are documented in [`docs/WORKVIVO-API.md`](docs/WORKVIVO-API.md).
+
+## Upgrading
+
+### next release
+
+On a hosted server, document reads (`workvivo_get_document`, and
+`workvivo_digest_space` with `include_documents`) now refuse with a clear message
+instead of failing on the network. The digest still returns everything else and
+marks each document as not fetched. A local install is unchanged.
 
 ## Without the server: the `workvivo-fpx` skill
 

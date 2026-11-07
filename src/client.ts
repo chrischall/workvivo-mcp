@@ -24,6 +24,7 @@ import {
   splitHost,
   truncateErrorMessage,
 } from '@chrischall/mcp-utils';
+import { isHostedEnv } from '@chrischall/mcp-utils/export';
 import {
   adoptBrowserDownload,
   readDownloadPolicy,
@@ -84,6 +85,30 @@ export class WorkvivoApiError extends McpToolError {
   constructor(message: string, status: number, hint?: string) {
     super(message, { status, kind: 'http', ...(hint ? { hint } : {}) });
     this.name = 'WorkvivoApiError';
+  }
+}
+
+/**
+ * Why a hosted server (mcp-host) refuses to read documents. The signed file
+ * URL is on the tenant's file host, which is outside the registration's egress
+ * allowlist and too unstable to add, and the bridge's `fetch` verb decodes
+ * every body as UTF-8 text (and the file host sends no CORS headers), so the
+ * browser cannot hand the bytes over either. The browser `download` verb saves
+ * on the user's machine, which the runner cannot read.
+ */
+export const HOSTED_DOCUMENTS_UNSUPPORTED =
+  "Reading Workvivo documents isn't supported on a hosted server yet: the file host is outside this " +
+  "server's allowed network hosts, and the browser bridge cannot return file contents. Use a local " +
+  'install, or open the document in Workvivo.';
+
+/** The refusal {@link WorkvivoClient.downloadDocument} raises when hosted. */
+export class HostedDocumentsError extends McpToolError {
+  constructor() {
+    super(HOSTED_DOCUMENTS_UNSUPPORTED, {
+      kind: 'unknown',
+      hint: 'Install workvivo-mcp locally to read documents, or open the document in Workvivo.',
+    });
+    this.name = 'HostedDocumentsError';
   }
 }
 
@@ -259,8 +284,12 @@ export class WorkvivoClient {
    * size before any body is read. Fallback (no capture permission, no
    * webRequest): the browser downloads it, then the same rules run on the file
    * and it is moved into place. Saved files are reused for the process's life.
+   *
+   * Hosted (`isHostedEnv`), it refuses before any capture or request: see
+   * {@link HOSTED_DOCUMENTS_UNSUPPORTED}.
    */
   async downloadDocument(ref: DocumentRef): Promise<DownloadOutcome> {
+    if (isHostedEnv()) throw new HostedDocumentsError();
     const policy = this.downloadPolicy;
     if (policy instanceof Error) throw policy;
     const path = `/${ref.kind === 'document' ? 'document/link' : 'file'}/${ref.id}`;
