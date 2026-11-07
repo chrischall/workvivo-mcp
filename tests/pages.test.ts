@@ -1,8 +1,8 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { WorkvivoApiError } from '../src/client.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HOSTED_DOCUMENTS_UNSUPPORTED, WorkvivoApiError } from '../src/client.js';
 import { mapDownloadError } from '../src/transport-fetchproxy.js';
 import { documentRefOf } from '../src/tools/documents.js';
 import { linksAppendix, scopeOf } from '../src/tools/pages.js';
@@ -14,6 +14,7 @@ let h: H | undefined;
 afterEach(async () => {
   await h?.harness.close();
   h = undefined;
+  vi.unstubAllEnvs();
 });
 const call = async (routes: Record<string, unknown>, name: string, args: Record<string, unknown>) => {
   h = await harnessFor(routes);
@@ -153,6 +154,49 @@ describe('workvivo_get_page', () => {
 });
 
 describe('workvivo_get_document', () => {
+  it('hosted: refuses with a clear reason before any capture, bridge request or direct fetch', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    const fetchImpl = vi.fn();
+    h = await harnessFor({}, { fetchImpl: fetchImpl as unknown as typeof fetch });
+    h.transport.captures['/document/link/501'] = 'https://attachments.workvivo.us/u/x?Signature=S';
+    for (const args of [{ document_id: 501 }, { url: '/file/9' }]) {
+      const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: args });
+      expect(isError(r)).toBe(true);
+      const t = textOf(r);
+      expect(t).toContain("Reading Workvivo documents isn't supported on a hosted server yet");
+      expect(t).toContain('the browser bridge cannot return file contents');
+      expect(t).toContain('open the document in Workvivo');
+    }
+    expect(h.transport.captureCalls).toEqual([]);
+    expect(h.transport.downloadCalls).toEqual([]);
+    expect(h.transport.calls).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('hosted: the client refuses too, so no other caller can reach the network (MCP_BLOB_BASE_URL alone counts)', async () => {
+    vi.stubEnv('MCP_BLOB_BASE_URL', 'https://blobs.example.com');
+    const fetchImpl = vi.fn();
+    h = await harnessFor({}, { fetchImpl: fetchImpl as unknown as typeof fetch });
+    await expect(h.client.downloadDocument({ kind: 'document', id: 501 })).rejects.toThrow(HOSTED_DOCUMENTS_UNSUPPORTED);
+    expect(h.transport.captureCalls).toEqual([]);
+    expect(h.transport.calls).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('local (not hosted): still downloads, unchanged', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '');
+    vi.stubEnv('MCP_BLOB_BASE_URL', '');
+    const path = join(dir, 'Local.txt');
+    writeFileSync(path, 'local body');
+    h = await harnessFor();
+    h.transport.downloads[`https://${HOST}/document/link/601`] = { path, bytes: 10, mime: 'text/plain' };
+    const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 601 } });
+    expect(isError(r)).toBe(false);
+    const t = textOf(r);
+    expect(t).toContain('local body');
+    expect(t).toContain('saved_to:');
+  });
+
   it('downloads through the browser, extracts text and windows it', async () => {
     const path = join(dir, 'Guide.txt');
     writeFileSync(path, 'x'.repeat(1200));
@@ -281,5 +325,25 @@ describe('workvivo_digest_space', () => {
     expect(t).toContain('1 more documents not extracted');
     expect(t).not.toContain('## Recent posts');
     expect(h.transport.downloadCalls).toEqual([`https://${HOST}/document/link/501`]);
+  });
+
+  it('hosted: keeps the digest and marks each linked document not fetched, with the reason and no network', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    const fetchImpl = vi.fn();
+    h = await harnessFor(routes(), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    const r = await h.harness.client.callTool({
+      name: 'workvivo_digest_space',
+      arguments: { space_id: 30, feed_items: 0, include_documents: true, max_documents: 1 },
+    });
+    expect(isError(r)).toBe(false);
+    const t = textOf(r);
+    expect(t).toContain('pages: 4');
+    expect(t).toContain('## Document contents (0 of 2; 1 translations skipped)');
+    expect(t).toContain('_Not fetched: Reading Workvivo documents');
+    expect(t).toContain('documents_extracted: 0');
+    expect(h.transport.captureCalls).toEqual([]);
+    expect(h.transport.downloadCalls).toEqual([]);
+    expect(h.transport.calls.some((c) => c.path.includes('/document/'))).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

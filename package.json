@@ -41,7 +41,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "@chrischall/mcp-utils": "^3.4.0",
+    "@chrischall/mcp-utils": "^3.7.2",
     "@fetchproxy/server": "^3.6.2",
     "@modelcontextprotocol/server": "^2.4.0",
     "mammoth": "^1.13.0",
