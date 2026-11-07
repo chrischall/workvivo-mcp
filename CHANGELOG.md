@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/chrischall/workvivo-mcp/compare/v0.3.0...v0.3.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **documents:** refuse document reads on hosted servers with a clear reason instead of a network error ([#12](https://github.com/chrischall/workvivo-mcp/issues/12)) ([45df0ac](https://github.com/chrischall/workvivo-mcp/commit/45df0acfd8bee745ae1eb02f13232127d24e4ee7))
+
 ## [0.3.0](https://github.com/chrischall/workvivo-mcp/compare/v0.2.0...v0.3.0) (2026-11-04)
 
 
