@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Read-only MCP server for Workvivo — your company feed, news, events, people directory, spaces and search. Routes through the user's signed-in Workvivo tab via the ContextMint Bridge browser extension, reusing their existing SSO-authenticated session.",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "plugins": [
     {
@@ -15,7 +15,7 @@
       "displayName": "Workvivo",
       "source": "./",
       "description": "Read-only Workvivo for Claude — feed, news, events, people, spaces and search through your signed-in session",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "author": {
         "name": "Chris Hall"
       },
