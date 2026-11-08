@@ -17,6 +17,13 @@
 // webRequest), it falls back to the browser's own download into ITS folder,
 // applies the same type/size rules to the saved file, then moves it into the
 // configured directory and removes the browser's copy.
+//
+// HOSTED (mcp-host) the server neither reaches the file host (egress is the
+// browser's, see mint.yaml) nor shares a disk with the browser, so step 3 is
+// `fetchSignedViaBridge`: the BROWSER fetches the signed URL and hands the
+// bytes back through the bridge (ContextMint Bridge ≥ 1.8.0). The same host,
+// type and size rules apply, with the size cap lowered to what one bridge
+// response can carry. Nothing is written to disk; the tool delivers a link.
 
 import { readFile, stat, unlink } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -30,6 +37,9 @@ import {
   ResponseTooLargeError,
   writeUniqueFile,
 } from '@chrischall/mcp-utils';
+import { BRIDGE_MAX_BYTES, BridgeResponseTooLargeError, type BytesResult } from './transport.js';
+
+export { BRIDGE_MAX_BYTES };
 
 export const DEFAULT_MAX_DOWNLOAD_MB = 50;
 /** Skipped unless WORKVIVO_SKIP_FILE_TYPES says otherwise. */
@@ -129,9 +139,84 @@ export function fileParts(name: string, mime?: string): { baseName: string; exte
 
 export type DownloadOutcome =
   | { kind: 'saved'; path: string; name: string; bytes: number; mime?: string; via: 'direct' | 'browser' }
-  | { kind: 'skipped'; name: string; reason: string; bytes?: number; mime?: string };
+  | { kind: 'skipped'; name: string; reason: string; bytes?: number; mime?: string }
+  /** Hosted: the bytes came through the bridge and are held in memory, not saved. */
+  | {
+      kind: 'fetched';
+      name: string;
+      bytes: number;
+      mime?: string;
+      data: Uint8Array;
+      via: 'bridge';
+      /** The download link minted for it, reused by later reads while it lasts. */
+      link?: { url: string; expiresAt: string };
+    };
 
 export const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+/** The size refusal on the bridge route, naming the size (when known) and the cap. */
+function bridgeTooBig(size: number | null, policy: DownloadPolicy, cap: number): string {
+  const what = size !== null ? `${mb(size)}, over` : 'larger than';
+  return (
+    `${what} the ${mb(cap)} cap for documents read through the browser bridge ` +
+    `(the lower of WORKVIVO_MAX_DOWNLOAD_MB, ${mb(policy.maxBytes)}, and the bridge limit, ${mb(BRIDGE_MAX_BYTES)})`
+  );
+}
+
+/**
+ * Hosted path: have the BROWSER GET the captured signed URL and return its
+ * bytes through the bridge. Same rules as {@link saveFromSignedUrl} — the
+ * host must be the tenant's, a skipped type is refused before any request, and
+ * the declared `content-length` / `content-type` are checked before the body
+ * is used — with the size cap lowered to `min(WORKVIVO_MAX_DOWNLOAD_MB,
+ * 16 MiB)`. Over-cap files are skipped with a reason, never an opaque error.
+ */
+export async function fetchSignedViaBridge(
+  signedUrl: string,
+  policy: DownloadPolicy,
+  allowedHost: (host: string) => boolean,
+  fetchBytes: (url: string) => Promise<BytesResult>,
+): Promise<DownloadOutcome> {
+  const u = new URL(signedUrl);
+  if (u.protocol !== 'https:' || !allowedHost(u.hostname)) {
+    throw new McpToolError(`Refusing to fetch a document from ${u.host}: not this Workvivo tenant's file host.`, { kind: 'http' });
+  }
+  const name = nameFromSignedUrl(signedUrl) ?? 'document';
+  const preRule = skipRuleFor(name, undefined, policy.skip);
+  if (preRule) return { kind: 'skipped', name, reason: `file type matches WORKVIVO_SKIP_FILE_TYPES rule "${preRule}"` };
+  const cap = Math.min(policy.maxBytes, BRIDGE_MAX_BYTES);
+  let got: BytesResult;
+  try {
+    got = await fetchBytes(signedUrl);
+  } catch (e) {
+    if (e instanceof BridgeResponseTooLargeError) {
+      return {
+        kind: 'skipped',
+        name,
+        ...(e.declaredBytes !== null ? { bytes: e.declaredBytes } : {}),
+        reason: bridgeTooBig(e.declaredBytes, policy, cap),
+      };
+    }
+    throw e;
+  }
+  if (got.status < 200 || got.status >= 300) {
+    throw new McpToolError(`The Workvivo file host answered HTTP ${got.status} for "${name}".`, {
+      status: got.status,
+      kind: 'http',
+      hint: 'The signed link expires within seconds; retry once.',
+    });
+  }
+  const mime = got.headers['content-type']?.split(';')[0]?.trim() || undefined;
+  const declared = Number(got.headers['content-length']);
+  const size = Number.isFinite(declared) && declared >= 0 && got.headers['content-length'] !== undefined ? declared : got.bytes.length;
+  if (size > cap || got.bytes.length > cap) {
+    const n = Math.max(size, got.bytes.length);
+    return { kind: 'skipped', name, bytes: n, ...(mime ? { mime } : {}), reason: bridgeTooBig(n, policy, cap) };
+  }
+  const postRule = skipRuleFor(name, mime, policy.skip);
+  if (postRule) return { kind: 'skipped', name, bytes: got.bytes.length, ...(mime ? { mime } : {}), reason: `file type matches WORKVIVO_SKIP_FILE_TYPES rule "${postRule}"` };
+  return { kind: 'fetched', name, bytes: got.bytes.length, ...(mime ? { mime } : {}), data: got.bytes, via: 'bridge' };
+}
 
 /**
  * Preferred path: GET the captured signed URL server-side and save it.

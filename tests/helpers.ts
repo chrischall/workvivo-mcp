@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { createTestHarness } from '@chrischall/mcp-utils/test';
 import { parseSkipList, type DownloadPolicy } from '../src/download.js';
 import { WorkvivoClient } from '../src/client.js';
-import type { BridgeProbeResult, BridgeStatus, DownloadResult, FetchInit, FetchResult, WorkvivoTransport } from '../src/transport.js';
+import type { BlobStore } from '@chrischall/mcp-utils/export';
+import type { BridgeProbeResult, BridgeStatus, BytesResult, DownloadResult, FetchInit, FetchResult, WorkvivoTransport } from '../src/transport.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
 import { registerFeedTools } from '../src/tools/feed.js';
 import { registerNewsTools } from '../src/tools/news.js';
@@ -46,6 +47,16 @@ export class StubTransport implements WorkvivoTransport {
     if (c === undefined) throw new Error(`capability "capture_redirect" not granted (declared: [fetch, download])`);
     if (c instanceof Error) throw c;
     return c;
+  }
+  bytesCalls: string[] = [];
+  /** url → what `fetchBytes` resolves (or an Error it rejects with). */
+  bytes: Record<string, BytesResult | Error> = {};
+  async fetchBytes(url: string): Promise<BytesResult> {
+    this.bytesCalls.push(url);
+    const b = this.bytes[url];
+    if (!b) throw new Error(`no stub bytes for ${url}`);
+    if (b instanceof Error) throw b;
+    return b;
   }
   constructor(public routes: Record<string, unknown | Handler> = {}) {}
   async download(opts: { url: string }): Promise<DownloadResult> {
@@ -95,12 +106,17 @@ export function testPolicy(over: Partial<DownloadPolicy> = {}): DownloadPolicy &
   return { dir: () => root, maxBytes: 50 * 1024 * 1024, skip: parseSkipList(undefined), root, ...over };
 }
 
-export function makeClient(
-  routes: Record<string, unknown> = {},
-  opts: { downloadPolicy?: DownloadPolicy | Error; fetchImpl?: typeof fetch } = {},
-) {
+type ClientOpts = { downloadPolicy?: DownloadPolicy | Error; fetchImpl?: typeof fetch; blobStore?: BlobStore | null };
+
+export function makeClient(routes: Record<string, unknown> = {}, opts: ClientOpts = {}) {
   const transport = new StubTransport(routes);
-  const client = new WorkvivoClient({ transport, host: HOST, downloadPolicy: opts.downloadPolicy ?? testPolicy(), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
+  const client = new WorkvivoClient({
+    transport,
+    host: HOST,
+    downloadPolicy: opts.downloadPolicy ?? testPolicy(),
+    ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    ...(opts.blobStore !== undefined ? { blobStore: opts.blobStore } : {}),
+  });
   return { transport, client };
 }
 
@@ -121,10 +137,7 @@ export const ALL_REGISTRARS = [
   registerRawTools,
 ];
 
-export async function harnessFor(
-  routes: Record<string, unknown> = {},
-  opts: { downloadPolicy?: DownloadPolicy | Error; fetchImpl?: typeof fetch } = {},
-) {
+export async function harnessFor(routes: Record<string, unknown> = {}, opts: ClientOpts = {}) {
   const { transport, client } = makeClient(routes, opts);
   const harness = await createTestHarness((s) => {
     for (const r of ALL_REGISTRARS) r(s, client);
@@ -140,4 +153,22 @@ export function payload(result: unknown): Record<string, unknown> {
 
 export function textOf(result: unknown): string {
   return (result as { content: Array<{ text: string }> }).content[0]!.text;
+}
+
+/** An in-memory blob store: records every PUT and signs a fake GET link. */
+export function fakeBlobStore() {
+  const puts: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+  const store = {
+    baseUrl: 'https://blobs.example.com/b/reg',
+    prefix: 'reg',
+    async put(key: string, body: Uint8Array | string, contentType: string) {
+      const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body;
+      puts.push({ key, body: bytes, contentType });
+      return { key, bytes: bytes.length };
+    },
+    signGetUrl(key: string) {
+      return { url: `https://blobs.example.com/b/reg/${key}?sig=LINKSIG`, expiresAtMs: Date.now() + 3_600_000 };
+    },
+  } as unknown as BlobStore;
+  return { store, puts };
 }

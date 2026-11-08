@@ -1,9 +1,10 @@
-// Text extraction for documents the browser downloaded.
+// Text extraction for linked documents.
 //
 // Workvivo's document links (`/document/link/<id>`, `/file/<id>`) 302 to a
-// signed file host, so they are fetched with the bridge's `download` verb —
-// the browser saves the file on this machine and reports its path. This module
-// turns that file into Markdown-ish text:
+// signed file host (see src/download.ts for how the file is fetched). A local
+// install saves it on this machine (`extractDocument(path)`); a hosted server
+// holds the bytes the bridge returned in memory (`extractDocumentBytes`). This
+// module turns either into Markdown-ish text:
 //
 //   - PDF  → per-page text via `unpdf` (pdf.js). pdf.js logs warnings with
 //     console.log — STDOUT, the MCP's JSON-RPC channel — so it runs with
@@ -83,13 +84,38 @@ export async function extractDocument(path: string, mime: string | undefined, or
   if (format === 'unsupported') {
     return { format, note: `No text extraction for ${extname(path) || mime || 'this file type'}; open the saved file instead.` };
   }
-  const bytes = await readBounded(path);
+  return extractFormat(format, await readBounded(path), origin, 'open the saved file');
+}
+
+/**
+ * Extract readable text from bytes held in memory (a hosted read, which saves
+ * nothing). `name` gives the type, as a saved file's path does.
+ */
+export async function extractDocumentBytes(
+  data: Uint8Array,
+  name: string,
+  mime: string | undefined,
+  origin: string,
+): Promise<ExtractedDocument> {
+  const format = formatOf(name, mime);
+  if (format === 'unsupported') {
+    return { format, note: `No text extraction for ${extname(name) || mime || 'this file type'}; use the download link instead.` };
+  }
+  return extractFormat(format, Buffer.from(data.buffer, data.byteOffset, data.byteLength), origin, 'use the download link');
+}
+
+async function extractFormat(
+  format: Exclude<DocumentFormat, 'unsupported'>,
+  bytes: Buffer,
+  origin: string,
+  openIt: string,
+): Promise<ExtractedDocument> {
   switch (format) {
     case 'pdf': {
       const { text, pages } = await extractPdf(new Uint8Array(bytes));
       return text.replace(/<!-- page \d+ -->/g, '').trim()
         ? { format, text, pages }
-        : { format, pages, note: 'The PDF has no text layer (likely scanned images); open the saved file instead.' };
+        : { format, pages, note: `The PDF has no text layer (likely scanned images); ${openIt} instead.` };
     }
     case 'docx':
       return { format, text: await extractDocx(bytes, origin) };

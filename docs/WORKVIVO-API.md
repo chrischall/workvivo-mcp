@@ -94,6 +94,11 @@ headers). Two ways through:
   reports the redirect target. That signed URL works from the server with no
   cookies, and a `HEAD` gives `Content-Length`, `Content-Type` and
   `Content-Disposition`. It has to be used within seconds.
+- **binary fetch through the bridge**, on a hosted server: the captured signed URL
+  is fetched by the extension's background worker (fetchproxy `getBytes`, ContextMint
+  Bridge 1.8.0+, 16 MiB cap), which CORS does not apply to, and the bytes come back
+  over the bridge. The file host is a subdomain of the tenant apex the pairing
+  already declares. Not yet exercised against a live tenant.
 - **download**, the fallback: `chrome.downloads` follows the redirect and saves the
   file in the browser's download folder. Note that `documents/<id>` in the API is a *different* id space: a link id
 there answers "No query results". The `download` capability has to be in the

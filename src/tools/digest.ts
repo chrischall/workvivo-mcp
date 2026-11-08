@@ -1,9 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { mapWithConcurrency, messageOf, toolAnnotations } from '@chrischall/mcp-utils';
-import { isHostedEnv } from '@chrischall/mcp-utils/export';
 import { z } from 'zod';
-import { HOSTED_DOCUMENTS_UNSUPPORTED, type WorkvivoClient } from '../client.js';
-import { extractDocument } from '../documents.js';
+import { type WorkvivoClient } from '../client.js';
+import { extractDocument, extractDocumentBytes } from '../documents.js';
+import { ExtensionUpdateRequiredError } from '../transport.js';
 import { extractLinks, htmlToMarkdown, isSignedUrl, rebaseHeadings, type ExtractedLink } from '../markdown.js';
 import { event, feedEntry, flattenTree, pageMarkdown, pageTree, space, type PageNode } from '../project.js';
 import { markdownResult, untrustedDescription } from '../view.js';
@@ -13,10 +13,11 @@ import { LOOKUP } from './hints.js';
 type Rec = Record<string, unknown>;
 
 /** Run one section; a failure becomes a note in the digest instead of failing the whole call. */
-async function section<T>(fn: () => Promise<T>): Promise<{ ok: T } | { error: string }> {
+async function section<T>(fn: () => Promise<T>, onError?: (e: unknown) => void): Promise<{ ok: T } | { error: string }> {
   try {
     return { ok: await fn() };
   } catch (e) {
+    onError?.(e);
     return { error: messageOf(e) };
   }
 }
@@ -34,7 +35,8 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
           'point to (with the document_id for workvivo_get_document), the space\'s document library and useful ' +
           'links, upcoming events, and its most recent posts. Set `include_documents: true` to also download and ' +
           'extract the text of the linked documents (capped by `max_documents`/`max_document_chars`; files are ' +
-          'saved in WORKVIVO_DOWNLOAD_DIR, and oversized or skipped types are listed, not fetched; on a hosted server each document is listed as not fetched, with the reason, and the rest of the digest is unaffected). Edits nothing in Workvivo (opening documents may be recorded as views, as in the browser).',
+          'saved in WORKVIVO_DOWNLOAD_DIR — on a hosted server they come through the browser bridge and nothing is saved — ' +
+          'and oversized or skipped types are listed, not fetched; a document that cannot be read is listed as not fetched, with the reason, and the rest of the digest is unaffected). Edits nothing in Workvivo (opening documents may be recorded as views, as in the browser).',
       ),
       _meta: LOOKUP,
       annotations: toolAnnotations({
@@ -47,7 +49,7 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
       inputSchema: z.object({
         space_id: idArg('space'),
         feed_items: z.coerce.number().int().min(0).max(100).optional().describe('Recent posts to include (default 10).'),
-        include_documents: z.boolean().optional().describe('Also download and extract linked documents (default false; not available on a hosted server).'),
+        include_documents: z.boolean().optional().describe('Also download and extract linked documents (default false).'),
         include_translations: z
           .boolean()
           .optional()
@@ -227,34 +229,40 @@ export function registerDigestTools(server: McpServer, client: WorkvivoClient): 
         const isTranslation = (d: ExtractedLink) => /^[A-Z]{2}(?:-[A-Z]{2})?$/.test(d.text);
         const pool = [...docs.values()].filter((d) => include_translations || !isTranslation(d));
         const skipped = docs.size - pool.length;
-        if (isHostedEnv()) {
-          // Hosted: documents cannot be read here (see HOSTED_DOCUMENTS_UNSUPPORTED).
-          // Keep the rest of the digest and mark each document, fetching nothing.
-          out.push(`## Document contents (0 of ${pool.length}${skipped ? `; ${skipped} translations skipped` : ''})`);
-          for (const d of pool) out.push(`### ${label(d)}\n\n_document_id ${d.document_id}_\n\n_Not fetched: ${HOSTED_DOCUMENTS_UNSUPPORTED}_`);
-        } else {
-          const targets = pool.slice(0, cap);
-          const results = await mapWithConcurrency(targets, 2, async (d) => {
-            const r = await section(async () => {
-              const file = await client.downloadDocument({ kind: 'document', id: d.document_id! });
-              if (file.kind === 'skipped') return { format: 'unsupported' as const, note: `Not downloaded: ${file.reason}.` };
-              return extractDocument(file.path, file.mime, origin);
-            });
-            return { d, r };
-          });
-          out.push(`## Document contents (${targets.length} of ${pool.length}${skipped ? `; ${skipped} translations skipped` : ''})`);
-          for (const { d, r } of results) {
-            out.push(`### ${label(d)}\n\n_document_id ${d.document_id}_`);
-            if ('error' in r) out.push(failed('this document', r.error));
-            else if (!r.ok.text) out.push(`_${r.ok.note ?? 'No text.'}_`);
-            else {
-              extracted++;
-              const t = r.ok.text.length > perDoc ? `${r.ok.text.slice(0, perDoc).trimEnd()}\n\n_(…truncated; workvivo_get_document document_id=${d.document_id} for the rest)_` : r.ok.text;
-              out.push(rebaseHeadings(t, 4));
+        const targets = pool.slice(0, cap);
+        // An extension too old for binary fetch fails every hosted read the same
+        // way: once seen, mark the rest with the same reason without asking again.
+        let updateRequired: ExtensionUpdateRequiredError | undefined;
+        const results = await mapWithConcurrency(targets, 2, async (d) => {
+          if (updateRequired) return { d, r: { notFetched: updateRequired.message } as const };
+          let mine: ExtensionUpdateRequiredError | undefined;
+          const r = await section(async () => {
+            const file = await client.downloadDocument({ kind: 'document', id: d.document_id! });
+            if (file.kind === 'skipped') return { format: 'unsupported' as const, note: `Not downloaded: ${file.reason}.` };
+            if (file.kind === 'fetched') return extractDocumentBytes(file.data, file.name, file.mime, origin);
+            return extractDocument(file.path, file.mime, origin);
+          }, (e) => {
+            if (e instanceof ExtensionUpdateRequiredError) {
+              mine = e;
+              updateRequired ??= e;
             }
+          });
+          if (mine) return { d, r: { notFetched: mine.message } as const };
+          return { d, r };
+        });
+        out.push(`## Document contents (${targets.length} of ${pool.length}${skipped ? `; ${skipped} translations skipped` : ''})`);
+        for (const { d, r } of results) {
+          out.push(`### ${label(d)}\n\n_document_id ${d.document_id}_`);
+          if ('notFetched' in r) out.push(`_Not fetched: ${r.notFetched}_`);
+          else if ('error' in r) out.push(failed('this document', r.error));
+          else if (!r.ok.text) out.push(`_${r.ok.note ?? 'No text.'}_`);
+          else {
+            extracted++;
+            const t = r.ok.text.length > perDoc ? `${r.ok.text.slice(0, perDoc).trimEnd()}\n\n_(…truncated; workvivo_get_document document_id=${d.document_id} for the rest)_` : r.ok.text;
+            out.push(rebaseHeadings(t, 4));
+          }
         }
         if (pool.length > cap) out.push(`_${pool.length - cap} more documents not extracted — raise max_documents or read them with workvivo_get_document._`);
-        }
       }
 
       return markdownResult(

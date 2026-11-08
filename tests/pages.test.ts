@@ -2,11 +2,12 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HOSTED_DOCUMENTS_UNSUPPORTED, WorkvivoApiError } from '../src/client.js';
+import { WorkvivoApiError } from '../src/client.js';
+import { BridgeResponseTooLargeError, ExtensionUpdateRequiredError } from '../src/transport.js';
 import { mapDownloadError } from '../src/transport-fetchproxy.js';
 import { documentRefOf } from '../src/tools/documents.js';
 import { linksAppendix, scopeOf } from '../src/tools/pages.js';
-import { HOST, harnessFor, makeClient, payload, textOf } from './helpers.js';
+import { HOST, fakeBlobStore, harnessFor, makeClient, payload, testPolicy, textOf } from './helpers.js';
 import * as fx from './fixtures.js';
 
 type H = Awaited<ReturnType<typeof harnessFor>>;
@@ -154,33 +155,140 @@ describe('workvivo_get_page', () => {
 });
 
 describe('workvivo_get_document', () => {
-  it('hosted: refuses with a clear reason before any capture, bridge request or direct fetch', async () => {
+  const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  const signedFor = (name: string) =>
+    'https://attachments.workvivo.us/uploads/1/2/abc.bin?response-content-disposition=' +
+    encodeURIComponent(`filename="${name}"`) +
+    '&Expires=1&Signature=SECRETSIG&Key-Pair-Id=K';
+  const bytesOf = (url: string, data: Uint8Array, headers: Record<string, string>) => ({ status: 200, url, headers, bytes: data });
+
+  it('hosted: reads the document through the bridge (capture → bytes) and delivers it as a link, bytes and mime intact', async () => {
     vi.stubEnv('MCP_DATA_DIR', '/data');
     const fetchImpl = vi.fn();
-    h = await harnessFor({}, { fetchImpl: fetchImpl as unknown as typeof fetch });
-    h.transport.captures['/document/link/501'] = 'https://attachments.workvivo.us/u/x?Signature=S';
-    for (const args of [{ document_id: 501 }, { url: '/file/9' }]) {
-      const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: args });
-      expect(isError(r)).toBe(true);
-      const t = textOf(r);
-      expect(t).toContain("Reading Workvivo documents isn't supported on a hosted server yet");
-      expect(t).toContain('the browser bridge cannot return file contents');
-      expect(t).toContain('open the document in Workvivo');
-    }
-    expect(h.transport.captureCalls).toEqual([]);
+    const blob = fakeBlobStore();
+    h = await harnessFor({}, { fetchImpl: fetchImpl as unknown as typeof fetch, blobStore: blob.store });
+    const textUrl = signedFor('Guide.txt');
+    const deckUrl = signedFor('Deck.pptx');
+    h.transport.captures['/document/link/501'] = textUrl;
+    h.transport.captures['/file/9'] = deckUrl;
+    const text = new TextEncoder().encode('hosted body');
+    const deck = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x80, 0xfe]);
+    h.transport.bytes[textUrl] = bytesOf(textUrl, text, { 'content-type': 'text/plain; charset=utf-8', 'content-length': String(text.length) });
+    h.transport.bytes[deckUrl] = bytesOf(deckUrl, deck, { 'content-type': PPTX, 'content-length': String(deck.length) });
+
+    const r1 = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 501 } });
+    expect(isError(r1)).toBe(false);
+    const t1 = textOf(r1);
+    expect(t1).toContain('hosted body');
+    expect(t1).toContain('name: "Guide.txt"');
+    expect(t1).toMatch(/link: "https:\/\/blobs\.example\.com\/b\/reg\/workvivo\/[^"]+Guide\.txt\?sig=LINKSIG"/);
+    expect(t1).toContain('link_expires_at:');
+    expect(t1).not.toContain('saved_to');
+    expect(t1).not.toContain('SECRETSIG');
+
+    const r2 = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { url: '/file/9' } });
+    expect(isError(r2)).toBe(false);
+    const t2 = textOf(r2);
+    expect(t2).toMatch(/No text extraction for \.pptx/);
+    expect(t2).toContain('link: "https://blobs.example.com');
+    expect(t2).not.toContain('open the saved file');
+
+    expect(h.transport.captureCalls).toEqual(['/document/link/501', '/file/9']);
+    expect(h.transport.bytesCalls).toEqual([textUrl, deckUrl]);
+    expect(blob.puts.map((p) => p.contentType)).toEqual(['text/plain', PPTX]);
+    expect([...blob.puts[0]!.body]).toEqual([...text]);
+    expect([...blob.puts[1]!.body]).toEqual([...deck]);
     expect(h.transport.downloadCalls).toEqual([]);
-    expect(h.transport.calls).toEqual([]);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('hosted: the client refuses too, so no other caller can reach the network (MCP_BLOB_BASE_URL alone counts)', async () => {
-    vi.stubEnv('MCP_BLOB_BASE_URL', 'https://blobs.example.com');
-    const fetchImpl = vi.fn();
-    h = await harnessFor({}, { fetchImpl: fetchImpl as unknown as typeof fetch });
-    await expect(h.client.downloadDocument({ kind: 'document', id: 501 })).rejects.toThrow(HOSTED_DOCUMENTS_UNSUPPORTED);
-    expect(h.transport.captureCalls).toEqual([]);
-    expect(h.transport.calls).toEqual([]);
-    expect(fetchImpl).not.toHaveBeenCalled();
+  it('hosted: a second page of the same document reuses the bytes and the link', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    const blob = fakeBlobStore();
+    h = await harnessFor({}, { blobStore: blob.store });
+    const url = signedFor('Long.txt');
+    h.transport.captures['/document/link/7'] = url;
+    h.transport.bytes[url] = bytesOf(url, new TextEncoder().encode('y'.repeat(1200)), { 'content-type': 'text/plain' });
+    const t1 = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 7, max_chars: 1000 } }));
+    expect(t1).toContain('next_offset: 1000');
+    const t2 = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 7, offset: 1000 } }));
+    expect(t2).not.toContain('next_offset');
+    expect(t2).toContain('link: "https://blobs.example.com');
+    expect(h.transport.bytesCalls).toHaveLength(1);
+    expect(blob.puts).toHaveLength(1);
+  });
+
+  it('hosted with no blob store: still returns the text, and says why there is no link', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    h = await harnessFor({}, { blobStore: null });
+    const url = signedFor('Note.txt');
+    h.transport.captures['/document/link/8'] = url;
+    h.transport.bytes[url] = bytesOf(url, new TextEncoder().encode('just text'), { 'content-type': 'text/plain' });
+    const t = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 8 } }));
+    expect(t).toContain('just text');
+    expect(t).not.toContain('link: "');
+    expect(t).toMatch(/link_note: "No download link: this server has no blob store/);
+  });
+
+  it('hosted: a skipped file type is refused before any bytes are fetched', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    const blob = fakeBlobStore();
+    h = await harnessFor({}, { blobStore: blob.store });
+    h.transport.captures['/document/link/3'] = signedFor('Town Hall.mp4');
+    const t = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 3 } }));
+    expect(t).toContain('skipped: true');
+    expect(t).toMatch(/Not downloaded: file type matches WORKVIVO_SKIP_FILE_TYPES rule "video\/\*"/);
+    expect(h.transport.bytesCalls).toEqual([]);
+    expect(blob.puts).toEqual([]);
+  });
+
+  it('hosted: an over-cap content-length is skipped with the size and the cap, before the body is used', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    const blob = fakeBlobStore();
+    h = await harnessFor({}, { blobStore: blob.store, downloadPolicy: testPolicy({ maxBytes: 1024 * 1024 }) });
+    const url = signedFor('Big.pdf');
+    h.transport.captures['/document/link/4'] = url;
+    h.transport.bytes[url] = bytesOf(url, new Uint8Array(10), { 'content-type': 'application/pdf', 'content-length': String(3 * 1024 * 1024) });
+    const t = textOf(await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 4 } }));
+    expect(t).toContain('skipped: true');
+    expect(t).toContain('Not downloaded: 3.0 MB, over the 1.0 MB cap');
+    expect(blob.puts).toEqual([]);
+  });
+
+  it('hosted: the bridge refusing an oversized body becomes a skip with a reason, not an error', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    h = await harnessFor({}, { blobStore: fakeBlobStore().store });
+    const url = signedFor('Huge.pdf');
+    h.transport.captures['/document/link/5'] = url;
+    h.transport.bytes[url] = new BridgeResponseTooLargeError({ limitBytes: 16 * 1024 * 1024, declaredBytes: 40 * 1024 * 1024 });
+    const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 5 } });
+    expect(isError(r)).toBe(false);
+    const t = textOf(r);
+    expect(t).toContain('skipped: true');
+    expect(t).toContain('Not downloaded: 40.0 MB, over the 16.0 MB cap');
+  });
+
+  it('hosted: an extension too old for binary fetch is a clear update-required error, with no browser-download fallback', async () => {
+    vi.stubEnv('MCP_BLOB_BASE_URL', 'https://blobs.example.com/b/reg');
+    h = await harnessFor({}, { blobStore: fakeBlobStore().store });
+    const url = signedFor('Guide.txt');
+    h.transport.captures['/document/link/6'] = url;
+    h.transport.bytes[url] = new ExtensionUpdateRequiredError();
+    const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 6 } });
+    expect(isError(r)).toBe(true);
+    expect(textOf(r)).toMatch(/ContextMint Bridge must be updated to 1\.8\.0 or later/);
+    expect(h.transport.downloadCalls).toEqual([]);
+  });
+
+  it('hosted: a file host off the tenant apex is refused without fetching it', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    h = await harnessFor({}, { blobStore: fakeBlobStore().store });
+    h.transport.captures['/document/link/10'] = 'https://files.example.com/x.pdf?Signature=S';
+    const r = await h.harness.client.callTool({ name: 'workvivo_get_document', arguments: { document_id: 10 } });
+    expect(isError(r)).toBe(true);
+    expect(textOf(r)).toMatch(/not this Workvivo tenant's file host/);
+    expect(h.transport.bytesCalls).toEqual([]);
+    expect(h.transport.downloadCalls).toEqual([]);
   });
 
   it('local (not hosted): still downloads, unchanged', async () => {
@@ -327,23 +435,44 @@ describe('workvivo_digest_space', () => {
     expect(h.transport.downloadCalls).toEqual([`https://${HOST}/document/link/501`]);
   });
 
-  it('hosted: keeps the digest and marks each linked document not fetched, with the reason and no network', async () => {
+  it('hosted: extracts linked documents through the bridge', async () => {
     vi.stubEnv('MCP_DATA_DIR', '/data');
     const fetchImpl = vi.fn();
-    h = await harnessFor(routes(), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    h = await harnessFor(routes(), { fetchImpl: fetchImpl as unknown as typeof fetch, blobStore: fakeBlobStore().store });
+    const url = 'https://attachments.workvivo.us/uploads/1/2/d.txt?Signature=S';
+    h.transport.captures['/document/link/501'] = url;
+    h.transport.bytes[url] = { status: 200, url, headers: { 'content-type': 'text/plain' }, bytes: new TextEncoder().encode('Hosted body of 501') };
     const r = await h.harness.client.callTool({
       name: 'workvivo_digest_space',
       arguments: { space_id: 30, feed_items: 0, include_documents: true, max_documents: 1 },
     });
     expect(isError(r)).toBe(false);
     const t = textOf(r);
-    expect(t).toContain('pages: 4');
-    expect(t).toContain('## Document contents (0 of 2; 1 translations skipped)');
-    expect(t).toContain('_Not fetched: Reading Workvivo documents');
-    expect(t).toContain('documents_extracted: 0');
-    expect(h.transport.captureCalls).toEqual([]);
+    expect(t).toContain('## Document contents (1 of 2; 1 translations skipped)');
+    expect(t).toContain('Hosted body of 501');
+    expect(t).toContain('documents_extracted: 1');
     expect(h.transport.downloadCalls).toEqual([]);
-    expect(h.transport.calls.some((c) => c.path.includes('/document/'))).toBe(false);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('hosted: an extension too old for binary fetch marks each document not fetched, with the reason, once', async () => {
+    vi.stubEnv('MCP_DATA_DIR', '/data');
+    h = await harnessFor(routes(), { blobStore: fakeBlobStore().store });
+    for (const id of [501, 502, 503]) {
+      const url = `https://attachments.workvivo.us/uploads/${id}.txt?Signature=S`;
+      h.transport.captures[`/document/link/${id}`] = url;
+      h.transport.bytes[url] = new ExtensionUpdateRequiredError();
+    }
+    const r = await h.harness.client.callTool({
+      name: 'workvivo_digest_space',
+      arguments: { space_id: 30, feed_items: 0, include_documents: true, include_translations: true, max_documents: 5 },
+    });
+    expect(isError(r)).toBe(false);
+    const t = textOf(r);
+    expect(t).toContain('pages: 4');
+    expect(t.match(/_Not fetched: ContextMint Bridge must be updated to 1\.8\.0 or later/g)?.length).toBe(3);
+    expect(t).toContain('documents_extracted: 0');
+    // Once the extension is known to be too old, the rest are not attempted.
+    expect(h.transport.bytesCalls.length).toBeLessThan(3);
   });
 });

@@ -1,10 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { toolAnnotations } from '@chrischall/mcp-utils';
-import { isHostedEnv } from '@chrischall/mcp-utils/export';
+import { messageOf, toolAnnotations } from '@chrischall/mcp-utils';
+import { deliverFile } from '@chrischall/mcp-utils/export';
 import { basename } from 'node:path';
 import { z } from 'zod';
-import { HostedDocumentsError, WorkvivoApiError, type DocumentRef, type WorkvivoClient } from '../client.js';
-import { extractDocument, windowOf } from '../documents.js';
+import { WorkvivoApiError, type DocumentRef, type WorkvivoClient } from '../client.js';
+import { extractDocument, extractDocumentBytes, windowOf, type ExtractedDocument } from '../documents.js';
+import type { DownloadOutcome } from '../download.js';
 import { markdownResult, untrustedDescription } from '../view.js';
 import { workMeta } from './hints.js';
 
@@ -30,6 +31,36 @@ export function documentRefOf(args: { document_id?: number; url?: string }, host
 
 export const DEFAULT_MAX_CHARS = 20_000;
 
+type Fetched = Extract<DownloadOutcome, { kind: 'fetched' }>;
+
+/**
+ * Hosted: hand the file itself over as a signed, expiring blob-store link
+ * (`deliverFile`), minted once per document and reused while it has a minute
+ * left. Never fails the read — the text is the main deliverable — so a missing
+ * store or a failed upload becomes a `link_note` instead.
+ */
+async function linkFor(client: WorkvivoClient, file: Fetched): Promise<Record<string, unknown>> {
+  if (file.link && Date.parse(file.link.expiresAt) - Date.now() > 60_000) {
+    return { link: file.link.url, link_expires_at: file.link.expiresAt };
+  }
+  const store = client.blobStore;
+  if (!store) return { link_note: 'No download link: this server has no blob store configured.' };
+  try {
+    const d = await deliverFile({
+      bytes: file.data,
+      fileName: file.name,
+      ...(file.mime ? { mimeType: file.mime } : {}),
+      prefer: 'link',
+      store,
+      keyPrefix: 'workvivo',
+    });
+    file.link = { url: d.url!, expiresAt: d.expiresAt! };
+    return { link: d.url, link_expires_at: d.expiresAt };
+  } catch (e) {
+    return { link_note: `No download link: ${messageOf(e)}` };
+  }
+}
+
 export function registerDocumentTools(server: McpServer, client: WorkvivoClient): void {
   server.registerTool(
     'workvivo_get_document',
@@ -41,8 +72,12 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
           'and return its text as Markdown: PDFs page by page, Word (.docx) with headings/lists/tables, plain text ' +
           'and HTML. Other types (PowerPoint, Excel, images) return the saved file path instead. The browser ' +
           'fetches the file through your signed-in session and saves it in WORKVIVO_DOWNLOAD_DIR (default ' +
-          '~/Downloads/workvivo-mcp; repeat reads reuse it). Files over WORKVIVO_MAX_DOWNLOAD_MB (default 50) and ' +
-          'types in WORKVIVO_SKIP_FILE_TYPES (default video and audio) are skipped without downloading. Long documents page with `offset`/`max_chars`. Not available on a hosted server: there the call refuses with the reason, before any request — use a local install or open the document in Workvivo. Edits nothing in Workvivo, though like opening it in the browser, Workvivo may record the view.',
+          '~/Downloads/workvivo-mcp; repeat reads reuse it). On a hosted server the browser returns the file ' +
+          'through the bridge instead (needs ContextMint Bridge 1.8.0 or later), and the result carries a ' +
+          'short-lived download `link` rather than a saved path. Files over WORKVIVO_MAX_DOWNLOAD_MB (default 50; ' +
+          'at most 16 MB on a hosted server) and types in WORKVIVO_SKIP_FILE_TYPES (default video and audio) are ' +
+          'skipped without downloading. Long documents page with `offset`/`max_chars`. Edits nothing in Workvivo, ' +
+          'though like opening it in the browser, Workvivo may record the view.',
       ),
       _meta: workMeta('other'),
       annotations: toolAnnotations({
@@ -66,7 +101,6 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
       }),
     },
     async ({ document_id, url, offset, max_chars }) => {
-      if (isHostedEnv()) throw new HostedDocumentsError();
       const ref = documentRefOf({ document_id, url }, client.host);
       const file = await client.downloadDocument(ref);
       const ids = { document_id: ref.kind === 'document' ? ref.id : undefined, file_id: ref.kind === 'file' ? ref.id : undefined };
@@ -76,16 +110,15 @@ export function registerDocumentTools(server: McpServer, client: WorkvivoClient)
           `_Not downloaded: ${file.reason}. Open it in Workvivo, or change WORKVIVO_SKIP_FILE_TYPES / WORKVIVO_MAX_DOWNLOAD_MB._`,
         );
       }
-      const doc = await extractDocument(file.path, file.mime, client.origin);
-      const meta: Record<string, unknown> = {
-        ...ids,
-        name: basename(file.path),
-        mime: file.mime,
-        bytes: file.bytes,
-        format: doc.format,
-        pages: doc.pages,
-        saved_to: file.path,
-      };
+      let doc: ExtractedDocument;
+      let meta: Record<string, unknown>;
+      if (file.kind === 'fetched') {
+        doc = await extractDocumentBytes(file.data, file.name, file.mime, client.origin);
+        meta = { ...ids, name: file.name, mime: file.mime, bytes: file.bytes, format: doc.format, pages: doc.pages, ...(await linkFor(client, file)) };
+      } else {
+        doc = await extractDocument(file.path, file.mime, client.origin);
+        meta = { ...ids, name: basename(file.path), mime: file.mime, bytes: file.bytes, format: doc.format, pages: doc.pages, saved_to: file.path };
+      }
       if (!doc.text) return markdownResult(meta, `_${doc.note ?? 'No text could be extracted.'}_`);
       const w = windowOf(doc.text, offset ?? 0, max_chars ?? DEFAULT_MAX_CHARS);
       meta.total_chars = w.total;

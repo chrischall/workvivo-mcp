@@ -58,11 +58,10 @@ egress:
   # mode). WORKVIVO_HOST only selects WHICH tab the extension routes to. The
   # only socket the process opens is the loopback concentrator the extension
   # connects to; the SAML sign-in hosts are followed by the browser.
-  # One exception, tenant-specific so not listable here: linked documents.
-  # The bridge captures a document link's short-lived signed redirect target
-  # and THIS process GETs it — from the tenant's file host on the same apex as
-  # WORKVIVO_HOST (e.g. attachments.workvivo.us for acme.workvivo.us; other
-  # hosts are refused). Derive it from WORKVIVO_HOST when registering. If that
-  # host is unreachable, documents fall back to a browser download, which only
-  # works where the browser and this process share a disk.
+  # Linked documents included: on a hosted server the bridge captures a
+  # document link's short-lived signed redirect target and the BROWSER fetches
+  # it (ContextMint Bridge >= 1.8.0 returns the bytes through the bridge), so
+  # this process never opens a connection to the tenant's file host. (A local
+  # install fetches that host directly, but local installs are not bound by
+  # this allowlist.)
   allow: []
