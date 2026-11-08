@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/chrischall/workvivo-mcp/compare/v0.3.1...v0.4.0) (2026-11-08)
+
+
+### Features
+
+* **documents:** read linked documents on hosted servers through the browser bridge ([#14](https://github.com/chrischall/workvivo-mcp/issues/14)) ([9f2062d](https://github.com/chrischall/workvivo-mcp/commit/9f2062d4bf30d1e486c3637db26bb1fd547e3a09))
+
 ## [0.3.1](https://github.com/chrischall/workvivo-mcp/compare/v0.3.0...v0.3.1) (2026-11-07)
 
 
