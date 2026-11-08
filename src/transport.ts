@@ -11,6 +11,8 @@
 // (non-2xx, sign-in bounce, JSON parse, the CSRF handshake) lives on the
 // client — every implementation only round-trips a request.
 
+import { McpToolError } from '@chrischall/mcp-utils';
+
 export interface FetchInit {
   /** Path-and-query relative to the Workvivo host, e.g. `/api/activity`. */
   path: string;
@@ -42,6 +44,54 @@ export interface DownloadResult {
   finalUrl?: string;
 }
 
+/** A response whose body came back through the bridge as BYTES, intact. */
+export interface BytesResult {
+  status: number;
+  /** Final URL after redirects. */
+  url: string;
+  /** Lower-cased; only `content-type`, `content-length`, `content-disposition`, each when sent. */
+  headers: Record<string, string>;
+  bytes: Uint8Array;
+}
+
+/** Most bytes one bridge response can carry (fetchproxy's `MAX_BINARY_RESPONSE_BYTES`). */
+export const BRIDGE_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The paired ContextMint Bridge predates binary fetch (1.8.0), so it cannot
+ * hand a document's bytes over. Updating the extension is the only fix;
+ * re-pairing changes nothing.
+ */
+export class ExtensionUpdateRequiredError extends McpToolError {
+  constructor(cause?: unknown) {
+    super(
+      'ContextMint Bridge must be updated to 1.8.0 or later to read Workvivo documents on a hosted server: ' +
+        'the installed version cannot return file contents through the bridge.',
+      {
+        kind: 'unknown',
+        ...(cause !== undefined ? { cause } : {}),
+        hint:
+          'Update ContextMint Bridge (Chrome Web Store / App Store, or reload a sideloaded copy), then retry. ' +
+          'Your pairing is fine and does not need to be redone.',
+      },
+    );
+    this.name = 'ExtensionUpdateRequiredError';
+  }
+}
+
+/** The bridge refused a body over its per-response cap. Callers turn this into a skip. */
+export class BridgeResponseTooLargeError extends Error {
+  readonly limitBytes: number;
+  readonly declaredBytes: number | null;
+  constructor(info: { limitBytes: number | null; declaredBytes: number | null }, cause?: unknown) {
+    const limit = info.limitBytes ?? BRIDGE_MAX_BYTES;
+    super(`the file is larger than the ${limit}-byte cap one bridge response can carry`, cause !== undefined ? { cause } : undefined);
+    this.name = 'BridgeResponseTooLargeError';
+    this.limitBytes = limit;
+    this.declaredBytes = info.declaredBytes;
+  }
+}
+
 export type BridgeStatus = import('@chrischall/mcp-utils/fetchproxy').BridgeHealth;
 export type BridgeProbeResult = import('@chrischall/mcp-utils/fetchproxy').BridgeProbeResult;
 
@@ -60,6 +110,12 @@ export interface WorkvivoTransport {
    *  browser follows it (nothing is downloaded). For document links that is a
    *  short-lived signed file URL. */
   captureSignedUrl(path: string): Promise<string>;
+  /** GET an absolute URL (a captured signed file URL) through the browser and
+   *  return the body as bytes — the hosted route to a document, since the
+   *  bytes never touch this process's own network. Rejects with
+   *  {@link ExtensionUpdateRequiredError} for an extension without binary
+   *  fetch and {@link BridgeResponseTooLargeError} over the bridge's cap. */
+  fetchBytes(url: string): Promise<BytesResult>;
   /** Run one healthcheck probe through `fetchFn` and project bridge health. */
   runProbe(fetchFn: (path: string) => Promise<unknown>, probePath: string): Promise<BridgeProbeResult>;
   /** Diagnostic snapshot of the bridge. */

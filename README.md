@@ -88,11 +88,15 @@ and it is moved into `WORKVIVO_DOWNLOAD_DIR`. This needs a pairing that includes
 `capture_redirect` and `download` permissions. If you paired an earlier version,
 remove workvivo-mcp in the ContextMint Bridge popup and approve the new pair code.
 
-Documents can't be read on a **hosted** server (mcp-host) yet. The file host is
-outside the server's allowed network hosts, and the browser bridge can't return file
-contents. `workvivo_get_document` refuses with that reason before making any request,
-and `workvivo_digest_space` lists each linked document as not fetched while returning
-the rest of the space. Use a local install to read documents.
+On a **hosted** server (mcp-host), the server can't reach the file host and doesn't
+share a disk with your browser, so the browser fetches the file and returns its bytes
+through the bridge instead. This needs **ContextMint Bridge 1.8.0 or later**; an
+older version is refused with a message saying to update it. The same type and size
+rules apply, checked against the file's declared type and size before its contents
+are used, but the size cap is the lower of `WORKVIVO_MAX_DOWNLOAD_MB` and 16 MB (the
+most one bridge response can carry). A larger file is listed as skipped, with its
+size and the cap. Nothing is saved on the server: `workvivo_get_document` returns the
+text plus a short-lived download `link` for the file itself.
 
 The endpoints and their quirks are documented in [`docs/WORKVIVO-API.md`](docs/WORKVIVO-API.md).
 
@@ -101,9 +105,16 @@ The endpoints and their quirks are documented in [`docs/WORKVIVO-API.md`](docs/W
 ### next release
 
 On a hosted server, document reads (`workvivo_get_document`, and
-`workvivo_digest_space` with `include_documents`) now refuse with a clear message
-instead of failing on the network. The digest still returns everything else and
-marks each document as not fetched. A local install is unchanged.
+`workvivo_digest_space` with `include_documents`) now work: your browser fetches the
+file and hands it back through the bridge. Update ContextMint Bridge to **1.8.0 or
+later** first; with an older version the read fails with a message saying so, and the
+digest marks each document as not fetched with that reason.
+
+Your existing pairing keeps working, and you don't need to re-approve it. The file host
+(`attachments.<your Workvivo domain>`) is already covered by the domain the pairing
+approved, so the declared domains are unchanged. (The extension compares a pairing's
+domains as a set: had they changed, it would have asked you to approve a new pair
+code.) A local install is unchanged.
 
 ## Without the server: the `workvivo-fpx` skill
 

@@ -41,13 +41,23 @@ is behind SAML SSO and its public API needs an admin token.
   `Content-Length` cap before reading the body. It fetches only hosts on the tenant's
   apex and writes with `writeUniqueFile` into `WORKVIVO_DOWNLOAD_DIR`. The fallback
   is the browser's `download` verb, with the same rules applied to the saved file,
-  then a move. **Hosted** (`isHostedEnv`): refused before any capture or request
-  (`HostedDocumentsError` / `HOSTED_DOCUMENTS_UNSUPPORTED` in src/client.ts, checked in
-  `downloadDocument` and in `workvivo_get_document`; `workvivo_digest_space` marks each
-  document not fetched instead). The signed URL's file host is outside mint.yaml's
-  egress allowlist, and the bridge's `fetch` decodes bodies with `response.text()`
-  (lossy for binary) and cannot reach the CORS-less file host, so there is no hosted
-  route to the bytes until fetchproxy can return binary bodies. Capabilities: `['fetch','capture_redirect','download']`. An older
+  then a move. **Hosted** (`isHostedEnv`): the same capture, then the BROWSER fetches
+  the signed URL through the bridge (`transport.fetchBytes` → fetchproxy `getBytes`,
+  from the extension's background worker, `credentials: 'omit'`) and returns the bytes
+  (`fetchSignedViaBridge`, outcome `fetched`, held in memory, the last 4 cached for
+  paging). Same host and type rules; `content-length`/`content-type` are checked
+  before the body is used; the cap is `min(WORKVIVO_MAX_DOWNLOAD_MB, 16 MiB)` and an
+  over-cap file is a `skipped` with size and cap. There is no browser-download fallback
+  hosted. `workvivo_get_document` delivers the file as a blob-store link (`deliverFile`,
+  minted once per document). Errors: an extension older than ContextMint Bridge 1.8.0
+  → `ExtensionUpdateRequiredError` (update it; re-pairing does not help — the digest
+  marks the rest "Not fetched" without asking again); `response_too_large` →
+  `BridgeResponseTooLargeError` → a skip; a final URL off the apex → a clear refusal
+  (`mapBytesError`). mint.yaml `egress` stays empty: the bytes never touch this
+  process's network. **Pairing domains stay `[apex]`**: the file host
+  (`attachments.<apex>`) is a subdomain of it, and the extension compares domains as a
+  SET, so adding an entry would send every existing pairing back through a re-pair
+  prompt for no extra reach. Capabilities: `['fetch','capture_redirect','download']`. An older
   pairing is *refused*, not re-prompted; `mapDownloadError` turns that into the
   re-pair remedy. Tests use `testPolicy()` (a temp dir) and must never touch
   `~/Downloads`. pdf.js writes warnings to STDOUT (the JSON-RPC channel):

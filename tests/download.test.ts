@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   adoptBrowserDownload,
+  BRIDGE_MAX_BYTES,
+  fetchSignedViaBridge,
   DownloadConfigError,
   fileParts,
   nameFromSignedUrl,
@@ -13,6 +15,7 @@ import {
   skipRuleFor,
 } from '../src/download.js';
 import { testPolicy } from './helpers.js';
+import { BridgeResponseTooLargeError, type BytesResult } from '../src/transport.js';
 
 const signed = (name: string, host = 'attachments.workvivo.us') =>
   `https://${host}/uploads/1/2/abc.bin?response-content-disposition=${encodeURIComponent(`filename="${name}"`)}&Expires=1&Signature=SIG&Key-Pair-Id=K`;
@@ -207,5 +210,81 @@ describe('client.downloadDocument', () => {
     const { makeClient } = await import('./helpers.js');
     const { client } = makeClient({}, { downloadPolicy: new DownloadConfigError('WORKVIVO_MAX_DOWNLOAD_MB must be positive') });
     await expect(client.downloadDocument({ kind: 'document', id: 1 })).rejects.toThrow(/WORKVIVO_MAX_DOWNLOAD_MB/);
+  });
+});
+
+describe('fetchSignedViaBridge (hosted: the bytes come through the browser)', () => {
+  const MiB = 1024 * 1024;
+  const answer = (bytes: Uint8Array, headers: Record<string, string>, status = 200) => {
+    const calls: string[] = [];
+    const fn = async (url: string): Promise<BytesResult> => {
+      calls.push(url);
+      return { status, url, headers, bytes };
+    };
+    return { fn, calls };
+  };
+
+  it('returns the bytes exactly, with the declared mime (parameters stripped)', async () => {
+    const data = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff]);
+    const { fn, calls } = answer(data, { 'content-type': 'application/pdf; charset=binary', 'content-length': '6' });
+    const out = await fetchSignedViaBridge(signed('Guide.pdf'), testPolicy(), tenant, fn);
+    expect(out).toMatchObject({ kind: 'fetched', name: 'Guide.pdf', bytes: 6, mime: 'application/pdf', via: 'bridge' });
+    expect(out.kind === 'fetched' && [...out.data]).toEqual([...data]);
+    expect(calls).toEqual([signed('Guide.pdf')]);
+  });
+
+  it('caps at the lower of WORKVIVO_MAX_DOWNLOAD_MB and the bridge limit, naming the size and the cap', async () => {
+    expect(BRIDGE_MAX_BYTES).toBe(16 * MiB);
+    const { fn } = answer(new Uint8Array(1), { 'content-length': String(20 * MiB) });
+    const out = await fetchSignedViaBridge(signed('Big.pdf'), testPolicy(), tenant, fn);
+    expect(out.kind).toBe('skipped');
+    expect(out.kind === 'skipped' && out.reason).toBe(
+      '20.0 MB, over the 16.0 MB cap for documents read through the browser bridge (the lower of WORKVIVO_MAX_DOWNLOAD_MB, 50.0 MB, and the bridge limit, 16.0 MB)',
+    );
+  });
+
+  it('checks the body length too when content-length is missing', async () => {
+    const { fn } = answer(new Uint8Array(2048), {});
+    const out = await fetchSignedViaBridge(signed('NoLen.pdf'), testPolicy({ maxBytes: 1024 }), tenant, fn);
+    expect(out).toMatchObject({ kind: 'skipped', bytes: 2048 });
+  });
+
+  it('skips by the declared content-type after the fetch when the name says nothing', async () => {
+    const { fn } = answer(new Uint8Array(4), { 'content-type': 'video/mp4' });
+    const out = await fetchSignedViaBridge(signed('clip'), testPolicy(), tenant, fn);
+    expect(out).toMatchObject({ kind: 'skipped', mime: 'video/mp4', reason: 'file type matches WORKVIVO_SKIP_FILE_TYPES rule "video/*"' });
+  });
+
+  it('refuses a skipped type and a foreign host before asking the bridge', async () => {
+    const { fn, calls } = answer(new Uint8Array(1), {});
+    expect(await fetchSignedViaBridge(signed('a.mov'), testPolicy(), tenant, fn)).toMatchObject({ kind: 'skipped' });
+    await expect(fetchSignedViaBridge(signed('a.pdf', 'files.example.com'), testPolicy(), tenant, fn)).rejects.toThrow(/not this Workvivo tenant's file host/);
+    await expect(fetchSignedViaBridge(signed('a.pdf').replace('https:', 'http:'), testPolicy(), tenant, fn)).rejects.toThrow(/file host/);
+    expect(calls).toEqual([]);
+  });
+
+  it('maps a bridge size refusal to a skip, with or without a declared size', async () => {
+    const tooBig = (declaredBytes: number | null) => async (): Promise<BytesResult> => {
+      throw new BridgeResponseTooLargeError({ limitBytes: 16 * MiB, declaredBytes });
+    };
+    expect(await fetchSignedViaBridge(signed('a.pdf'), testPolicy(), tenant, tooBig(30 * MiB))).toMatchObject({
+      kind: 'skipped',
+      bytes: 30 * MiB,
+      reason: expect.stringMatching(/^30\.0 MB, over the 16\.0 MB cap/),
+    });
+    expect(await fetchSignedViaBridge(signed('a.pdf'), testPolicy(), tenant, tooBig(null))).toMatchObject({
+      kind: 'skipped',
+      reason: expect.stringMatching(/^larger than the 16\.0 MB cap/),
+    });
+  });
+
+  it('surfaces a non-2xx from the file host with the retry hint', async () => {
+    const { fn } = answer(new Uint8Array(0), {}, 403);
+    await expect(fetchSignedViaBridge(signed('a.pdf'), testPolicy(), tenant, fn)).rejects.toMatchObject({ status: 403, hint: expect.stringMatching(/retry once/) });
+  });
+
+  it('passes other bridge errors through', async () => {
+    const boom = new Error('bridge down');
+    await expect(fetchSignedViaBridge(signed('a.pdf'), testPolicy(), tenant, async () => { throw boom; })).rejects.toBe(boom);
   });
 });

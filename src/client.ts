@@ -24,9 +24,10 @@ import {
   splitHost,
   truncateErrorMessage,
 } from '@chrischall/mcp-utils';
-import { isHostedEnv } from '@chrischall/mcp-utils/export';
+import { blobStoreFromEnv, isHostedEnv, type BlobStore } from '@chrischall/mcp-utils/export';
 import {
   adoptBrowserDownload,
+  fetchSignedViaBridge,
   readDownloadPolicy,
   saveFromSignedUrl,
   type DownloadOutcome,
@@ -88,30 +89,6 @@ export class WorkvivoApiError extends McpToolError {
   }
 }
 
-/**
- * Why a hosted server (mcp-host) refuses to read documents. The signed file
- * URL is on the tenant's file host, which is outside the registration's egress
- * allowlist and too unstable to add, and the bridge's `fetch` verb decodes
- * every body as UTF-8 text (and the file host sends no CORS headers), so the
- * browser cannot hand the bytes over either. The browser `download` verb saves
- * on the user's machine, which the runner cannot read.
- */
-export const HOSTED_DOCUMENTS_UNSUPPORTED =
-  "Reading Workvivo documents isn't supported on a hosted server yet: the file host is outside this " +
-  "server's allowed network hosts, and the browser bridge cannot return file contents. Use a local " +
-  'install, or open the document in Workvivo.';
-
-/** The refusal {@link WorkvivoClient.downloadDocument} raises when hosted. */
-export class HostedDocumentsError extends McpToolError {
-  constructor() {
-    super(HOSTED_DOCUMENTS_UNSUPPORTED, {
-      kind: 'unknown',
-      hint: 'Install workvivo-mcp locally to read documents, or open the document in Workvivo.',
-    });
-    this.name = 'HostedDocumentsError';
-  }
-}
-
 const HOST_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 /**
@@ -169,7 +146,13 @@ export interface WorkvivoClientOptions {
   downloadPolicy?: DownloadPolicy | Error;
   /** Injectable fetch for the direct file download (tests). */
   fetchImpl?: typeof fetch;
+  /** Where hosted document links are stored. Default: the deployment's
+   *  (`blobStoreFromEnv`); `null` for none. */
+  blobStore?: BlobStore | null;
 }
+
+/** Hosted documents held in memory for re-reads (offset paging); bounded. */
+const HOSTED_CACHE_MAX = 4;
 
 export class WorkvivoClient {
   private readonly transport: WorkvivoTransport;
@@ -181,6 +164,9 @@ export class WorkvivoClient {
   private readonly downloads = new Map<string, Extract<DownloadOutcome, { kind: 'saved' }>>();
   private readonly downloadPolicy: DownloadPolicy | Error;
   private readonly fetchImpl: typeof fetch | undefined;
+  private readonly blobStoreOpt: BlobStore | null | undefined;
+  /** Hosted: documents fetched through the bridge (most recent last). */
+  private readonly fetched = new Map<string, Extract<DownloadOutcome, { kind: 'fetched' }>>();
 
   constructor(opts: WorkvivoClientOptions) {
     this.transport = opts.transport;
@@ -194,6 +180,7 @@ export class WorkvivoClient {
       }
     }
     this.fetchImpl = opts.fetchImpl;
+    this.blobStoreOpt = opts.blobStore;
     this.configError =
       opts.configError ??
       (opts.host ? undefined : new WorkvivoConfigError('WORKVIVO_HOST is not set.'));
@@ -271,6 +258,11 @@ export class WorkvivoClient {
     }
   }
 
+  /** The blob store hosted document links go to, if this deployment has one. */
+  get blobStore(): BlobStore | undefined {
+    return this.blobStoreOpt === undefined ? blobStoreFromEnv() : this.blobStoreOpt ?? undefined;
+  }
+
   /** Is `host` this tenant's own domain (e.g. `attachments.workvivo.us` for `acme.workvivo.us`)? */
   isTenantHost(host: string): boolean {
     const apex = splitHost(this.host).domain;
@@ -285,15 +277,18 @@ export class WorkvivoClient {
    * webRequest): the browser downloads it, then the same rules run on the file
    * and it is moved into place. Saved files are reused for the process's life.
    *
-   * Hosted (`isHostedEnv`), it refuses before any capture or request: see
-   * {@link HOSTED_DOCUMENTS_UNSUPPORTED}.
+   * Hosted (`isHostedEnv`): the same capture, then the BROWSER fetches the
+   * signed URL and returns the bytes through the bridge
+   * ({@link fetchSignedViaBridge}); the outcome is `fetched` (bytes in
+   * memory), never saved, and there is no browser-download fallback — a file
+   * saved on the user's machine is unreachable from here.
    */
   async downloadDocument(ref: DocumentRef): Promise<DownloadOutcome> {
-    if (isHostedEnv()) throw new HostedDocumentsError();
     const policy = this.downloadPolicy;
     if (policy instanceof Error) throw policy;
     const path = `/${ref.kind === 'document' ? 'document/link' : 'file'}/${ref.id}`;
     const url = `${this.origin}${path}`;
+    if (isHostedEnv()) return this.fetchDocumentViaBridge(path, url, policy);
     const cached = this.downloads.get(url);
     if (cached) {
       try {
@@ -324,6 +319,22 @@ export class WorkvivoClient {
       outcome = await adoptBrowserDownload(res, policy);
     }
     if (outcome.kind === 'saved') this.downloads.set(url, outcome);
+    return outcome;
+  }
+
+  private async fetchDocumentViaBridge(path: string, url: string, policy: DownloadPolicy): Promise<DownloadOutcome> {
+    const cached = this.fetched.get(url);
+    if (cached) return cached;
+    const signed = await this.transport.captureSignedUrl(path);
+    const su = new URL(signed);
+    if (su.hostname === this.host && /^\/(saml|login)(\/|$)/.test(su.pathname)) {
+      throw new WorkvivoSessionError(this.host, 'the document link redirected to sign-in');
+    }
+    const outcome = await fetchSignedViaBridge(signed, policy, (h) => this.isTenantHost(h), (u) => this.transport.fetchBytes(u));
+    if (outcome.kind === 'fetched') {
+      this.fetched.set(url, outcome);
+      while (this.fetched.size > HOSTED_CACHE_MAX) this.fetched.delete(this.fetched.keys().next().value!);
+    }
     return outcome;
   }
 

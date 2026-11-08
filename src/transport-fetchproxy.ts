@@ -11,13 +11,17 @@ import {
   createFetchproxyTransport,
   type FetchproxyTransport as FetchproxyVerbTransport,
 } from '@chrischall/mcp-utils/fetchproxy';
-import type {
-  BridgeProbeResult,
-  BridgeStatus,
-  DownloadResult,
-  FetchInit,
-  FetchResult,
-  WorkvivoTransport,
+import { FetchproxyExtensionUpdateRequiredError, FetchproxyResponseTooLargeError } from '@fetchproxy/server';
+import {
+  BridgeResponseTooLargeError,
+  ExtensionUpdateRequiredError,
+  type BridgeProbeResult,
+  type BridgeStatus,
+  type BytesResult,
+  type DownloadResult,
+  type FetchInit,
+  type FetchResult,
+  type WorkvivoTransport,
 } from './transport.js';
 
 export const DEFAULT_PORT = 37_149;
@@ -41,6 +45,34 @@ export function mapDownloadError(e: unknown): unknown {
   );
 }
 
+/** fetchproxy's error class, matched by class or (across bundled copies) by name. */
+function isNamed<T>(e: unknown, cls: abstract new (...args: never[]) => T, name: string): e is T {
+  return e instanceof cls || (e instanceof Error && e.name === name);
+}
+
+/**
+ * Map a failed binary fetch (`getBytes`) onto what the client can act on:
+ * an extension too old for binary fetch → update it; a body over the bridge's
+ * cap → a skip; a file host that redirected outside the paired domains → a
+ * clear refusal. A capability refusal keeps {@link mapDownloadError}'s remedy.
+ */
+export function mapBytesError(e: unknown, domain: string): unknown {
+  if (isNamed(e, FetchproxyExtensionUpdateRequiredError, 'FetchproxyExtensionUpdateRequiredError')) {
+    return new ExtensionUpdateRequiredError(e);
+  }
+  if (isNamed(e, FetchproxyResponseTooLargeError, 'FetchproxyResponseTooLargeError')) {
+    return new BridgeResponseTooLargeError({ limitBytes: e.limitBytes, declaredBytes: e.declaredBytes }, e);
+  }
+  const msg = messageOf(e);
+  if (classifyFetchError(msg) === 'domain_denied' || /outside declared domains/.test(msg)) {
+    return new McpToolError(
+      `The Workvivo file host redirected outside ${domain}, the only site workvivo-mcp's ContextMint Bridge pairing covers, so the document was not read.`,
+      { kind: 'http', cause: e, hint: 'Open the document in Workvivo instead.' },
+    );
+  }
+  return mapDownloadError(e);
+}
+
 const DEBUG = process.env.WORKVIVO_DEBUG === '1';
 
 function log(...args: unknown[]): void {
@@ -61,21 +93,29 @@ export interface FetchproxyTransportOptions {
 export class FetchproxyTransport implements WorkvivoTransport {
   private readonly inner: FetchproxyVerbTransport;
   private readonly host: string | undefined;
+  private readonly domain: string;
 
   constructor(opts: FetchproxyTransportOptions) {
     this.host = opts.host;
     const { domain, subdomain } = splitHost(opts.host ?? 'workvivo.com');
+    this.domain = domain;
     this.inner = createFetchproxyTransport<FetchproxyVerbTransport>({
       port: opts.port ?? DEFAULT_PORT,
       serverName: 'workvivo-mcp',
       version: opts.version,
       logListening: true,
+      // The apex, not the tenant host: it also covers the tenant's file host
+      // (`attachments.<apex>`), which hosted document reads fetch through the
+      // bridge (`fetchBytes`). Keep this set unchanged — the extension compares
+      // it as a SET, and any change sends every existing pairing back through a
+      // re-pair prompt.
       domains: [domain],
       // Linked documents (/document/link/<id>) 302 to a signed file host a page
       // fetch cannot follow. `capture_redirect` reads that signed URL so the
       // server can check and fetch the file itself; `download` is the fallback
       // (the browser saves it). Declared at pair time — an existing pairing
-      // without them is REFUSED (not re-prompted) until re-approved.
+      // without them is REFUSED (not re-prompted) until re-approved. Binary
+      // fetch needs no capability of its own: it is `fetch` with a byte body.
       capabilities: ['fetch', 'capture_redirect', 'download'],
       ...(subdomain ? { defaultSubdomain: subdomain } : {}),
       ...(opts.fetchTimeoutMs !== undefined ? { fetchTimeoutMs: opts.fetchTimeoutMs } : {}),
@@ -135,6 +175,21 @@ export class FetchproxyTransport implements WorkvivoTransport {
     } catch (e) {
       throw mapDownloadError(e);
     }
+  }
+
+  async fetchBytes(url: string): Promise<BytesResult> {
+    const started = Date.now();
+    let res: BytesResult;
+    try {
+      // From the extension's background worker (no tab, so the file host's
+      // missing CORS headers do not matter). The signed URL is its own
+      // credential, so the page's cookies are not sent along.
+      res = await this.inner.server.getBytes(url, { credentials: 'omit' });
+    } catch (e) {
+      throw mapBytesError(e, this.domain);
+    }
+    log('fetchBytes', { host: new URL(url).host, status: res.status, bytes: res.bytes.length, ms: Date.now() - started });
+    return { status: res.status, url: res.url, headers: res.headers, bytes: res.bytes };
   }
 
   async runProbe(fetchFn: (path: string) => Promise<unknown>, probePath: string): Promise<BridgeProbeResult> {
