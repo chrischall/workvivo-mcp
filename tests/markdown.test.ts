@@ -23,7 +23,7 @@ describe('htmlToMarkdown (TinyMCE pages)', () => {
     expect(md).toContain('[Guide](https://acme.workvivo.us/document/link/101)');
     expect(md).toContain('[FAQ](https://acme.workvivo.us/spaces/5/pages/faq)');
     expect(md).toMatch(/^-\s+One$/m);
-    expect(md).toMatch(/^-\s+\*Two\*$/m);
+    expect(md).toMatch(/^-\s+_Two_$/m);
     expect(md).not.toMatch(/<\/?div/);
   });
 
@@ -49,6 +49,43 @@ describe('htmlToMarkdown (TinyMCE pages)', () => {
     expect(md).toContain('[Embedded content](https://forms.example.com/x)');
     expect(md).not.toMatch(/^#+\s*$/m);
     expect(md.trim().endsWith('end')).toBe(true);
+  });
+
+  it('drops hidden content, inline data images and unsafe links; does not escape plain text', () => {
+    const md = htmlToMarkdown(
+      '<div style="display:none">preheader</div><h3>Benefits [draft] 5 * 3</h3>' +
+        '<p><img alt="Chart" src="data:image/png;base64,AAAA"><img src="data:image/png;base64,BBBB"></p>' +
+        '<p><a href="javascript:alert(1)">click</a> <a href="mailto:hr@example.com">HR</a></p>',
+      O,
+    );
+    expect(md).not.toContain('preheader');
+    expect(md).toContain('### Benefits [draft] 5 * 3');
+    expect(md).not.toContain('base64');
+    expect(md).toContain('[image: Chart]');
+    expect(md).not.toContain('javascript:');
+    expect(md).toContain('click [HR](mailto:hr@example.com)');
+  });
+
+  it('reads a linked image as a link to its target, so the target is extractable', () => {
+    const md = htmlToMarkdown('<p><a href="/document/link/55"><img alt="Brochure" src="/imageRedirect/9"></a></p>', O);
+    expect(md).toBe('[Brochure](https://acme.workvivo.us/document/link/55)');
+    expect(extractLinks(md, O)).toMatchObject([{ kind: 'document', document_id: 55, text: 'Brochure' }]);
+  });
+
+  it('names a linked image without alt text, and drops an iframe with no source', () => {
+    expect(htmlToMarkdown('<a href="/file/3"><img src="/i.png"></a><iframe></iframe>', O)).toBe('[image](https://acme.workvivo.us/file/3)');
+  });
+
+  it('encodes parentheses and spaces in URLs, so the link survives extractLinks', () => {
+    const md = htmlToMarkdown('<p><a href="https://en.wikipedia.org/wiki/Foo_(bar)">Foo</a> <img alt="x" src="/a (1).png"></p>', O);
+    expect(md).toBe('[Foo](https://en.wikipedia.org/wiki/Foo_%28bar%29) ![x](https://acme.workvivo.us/a%20%281%29.png)');
+    expect(extractLinks(md, O)[0]!.url).toBe('https://en.wikipedia.org/wiki/Foo_%28bar%29');
+  });
+
+  it('collapses back-to-back rules and keeps nested lists compact', () => {
+    const md = htmlToMarkdown('<ol><li><p>Pick</p><ul><li>PPO</li></ul></li><li>Go</li></ol><hr><hr><p>end</p>', O);
+    expect(md).toBe('1. Pick\n   - PPO\n2. Go\n\n---\n\nend');
+    expect(htmlToMarkdown('<p>a</p><hr><hr><p>&nbsp;</p>', O)).toBe('a');
   });
 
   it('returns empty for empty input', () => {

@@ -12,7 +12,7 @@
 // `zoom_webinar_password`, the user record carries a realtime-events token and
 // analytics keys.
 
-import { htmlToReadableText } from '@chrischall/mcp-utils/html';
+import { htmlToText } from '@chrischall/mcp-utils/rich';
 import { htmlToMarkdown, lexicalToMarkdown } from './markdown.js';
 
 type Rec = Record<string, unknown>;
@@ -71,11 +71,14 @@ export function utcIso(v: unknown): string | undefined {
   return m ? `${m[1]}T${m[2]}Z` : s;
 }
 
+/** A post-like HTML body as plain text, paragraphs and list items kept on their own lines. */
+const readableText = (html: string): string => htmlToText(html, { paragraphs: true });
+
 /** Strip search-highlight markup (`<strong>`) and other tags from a short string. */
 export function stripTags(v: unknown): string | undefined {
   const s = str(v);
   if (!s) return undefined;
-  return htmlToReadableText(s).trim() || undefined;
+  return readableText(s).trim() || undefined;
 }
 
 const MAX_TEXT = 600;
@@ -92,8 +95,8 @@ export function itemText(item: Rec): string | undefined {
   return (
     str(item.text) ??
     str(item.body) ??
-    (str(item.html) ? htmlToReadableText(item.html as string) : undefined) ??
-    (str(item.html_content) ? htmlToReadableText(item.html_content as string) : undefined) ??
+    (str(item.html) ? readableText(item.html as string) : undefined) ??
+    (str(item.html_content) ? readableText(item.html_content as string) : undefined) ??
     str(item.short_text)
   )?.trim();
 }
@@ -233,9 +236,17 @@ export function articleSummary(a: unknown): Rec {
   });
 }
 
-export function articleDetail(a: unknown): Rec {
+/** How an article body reads: plain text (the default) or Markdown (headings, lists, links kept). */
+export type BodyFormat = 'text' | 'markdown';
+
+export function articleDetail(a: unknown, opts: { bodyFormat?: BodyFormat; origin?: string } = {}): Rec {
   if (!isRec(a)) return {};
-  const body = str(a.html_content) ? htmlToReadableText(a.html_content as string) : itemText(a);
+  const html = str(a.html_content);
+  const body = html
+    ? opts.bodyFormat === 'markdown' && opts.origin
+      ? htmlToMarkdown(html, opts.origin)
+      : readableText(html)
+    : itemText(a);
   return prune({
     ...articleSummary(a),
     url: str(a.permalink) ?? articleSummary(a).url,
@@ -290,7 +301,7 @@ export function question(q: unknown): Rec {
   return prune({
     id: num(q.id),
     title: str(q.title),
-    text: str(q.body) ? htmlToReadableText(q.body as string) : itemText(q),
+    text: str(q.body) ? readableText(q.body as string) : itemText(q),
     at: utcIso(q.created_at),
     ...authorOf(q),
     answered: bool(q.answered),
@@ -309,7 +320,7 @@ export function answer(a: unknown): Rec {
     id: num(a.id),
     at: utcIso(a.created_at),
     ...authorOf(a),
-    text: str(a.body) ? htmlToReadableText(a.body as string) : itemText(a),
+    text: str(a.body) ? readableText(a.body as string) : itemText(a),
     accepted: bool(a.accepted) || undefined,
     votes: num(a.votes),
     comments: num(a.comments_count),
@@ -321,7 +332,7 @@ export function answer(a: unknown): Rec {
 export function event(e: unknown, opts: { detail?: boolean } = {}): Rec {
   if (!isRec(e)) return {};
   const spaces = spaceNames(e.spaces).length ? spaceNames(e.spaces) : spaceNames(e.event_spaces);
-  const text = itemText(e) ?? (str(e.html_content) ? htmlToReadableText(e.html_content as string) : undefined);
+  const text = itemText(e) ?? (str(e.html_content) ? readableText(e.html_content as string) : undefined);
   return prune({
     id: num(e.id),
     title: str(e.title),

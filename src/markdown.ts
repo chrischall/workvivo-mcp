@@ -17,7 +17,7 @@
 // Both converge on Markdown with absolute links, and `extractLinks` classifies
 // every link so an agent can follow pages and documents without re-parsing.
 
-import TurndownService from 'turndown';
+import { attr, decodeEntities, htmlToMarkdown as richMarkdown, type RichElement } from '@chrischall/mcp-utils/rich';
 
 type Rec = Record<string, unknown>;
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -37,7 +37,7 @@ export function absolutize(url: string, origin: string): string {
 
 /** Collapse runs of blank lines and trim trailing spaces left by layout markup. */
 export function tidyMarkdown(md: string): string {
-  return md
+  let out = md
     .replace(/\u00a0/g, ' ')
     .replace(/[\u200b\u200c\u200d\ufeff]/g, '')
     .split('\n')
@@ -49,79 +49,68 @@ export function tidyMarkdown(md: string): string {
     .replace(/\n{3,}/g, '\n\n')
     // Layout blocks emit back-to-back rules; one is enough.
     .replace(/^---\n\n(?:---\n\n)+/gm, '---\n\n')
-    .replace(/\n\n---\s*$/, '')
     .trim();
+  // A rule (or rules) closing the body divides nothing. A loop, not `(?:\n\n---\s*)+$`,
+  // which backtracks quadratically over a long run of rules.
+  while (out.endsWith('\n\n---')) out = out.slice(0, -5).trimEnd();
+  return out;
 }
 
-function escapeCell(s: string): string {
-  return s.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, '<br>').trim();
+/** An http(s)/mailto target, in-app paths made absolute; `undefined` for anything else. */
+function target(raw: string | undefined, origin: string): string | undefined {
+  if (raw === undefined) return undefined;
+  const url = absolutize(decodeEntities(raw), origin);
+  return /^(https?:\/\/|mailto:)/i.test(url) ? url : undefined;
 }
 
-function buildTurndown(origin: string): TurndownService {
-  const td = new TurndownService({
-    headingStyle: 'atx',
-    hr: '---',
-    bulletListMarker: '-',
-    codeBlockStyle: 'fenced',
-    emDelimiter: '*',
-    strongDelimiter: '**',
-    linkStyle: 'inlined',
-  });
-  td.remove(['script', 'style', 'noscript']);
+/**
+ * A URL safe inside `(…)`: extractLinks reads up to the first `)` or space.
+ * The hook renders links itself, so /rich's own link encoding never applies.
+ */
+const mdUrl = (url: string): string =>
+  url.replace(/[()\s]/g, (c) => (c === '(' ? '%28' : c === ')' ? '%29' : encodeURIComponent(c)));
 
-  td.addRule('image', {
-    filter: 'img',
-    replacement: (_content, node) => {
-      const el = node as HTMLElement;
-      const alt = (el.getAttribute('alt') ?? '').trim();
-      const src = (el.getAttribute('src') ?? '').trim();
-      if (!src || isSignedUrl(src)) return alt ? `[image: ${alt}]` : '';
-      return `![${alt}](${absolutize(src, origin)})`;
-    },
-  });
+const altOf = (el: RichElement): string => decodeEntities(attr(el.attrs, 'alt') ?? '').replace(/\s+/g, ' ').trim();
 
-  td.addRule('iframe', {
-    filter: 'iframe',
-    replacement: (_content, node) => {
-      const src = ((node as HTMLElement).getAttribute('src') ?? '').trim();
-      return src ? `\n\n[Embedded content](${absolutize(src, origin)})\n\n` : '';
-    },
-  });
-
-  td.addRule('link', {
-    filter: (node) => node.nodeName === 'A' && !!(node as HTMLElement).getAttribute('href'),
-    replacement: (content, node) => {
-      const href = absolutize((node as HTMLElement).getAttribute('href') ?? '', origin);
-      const text = content.replace(/\s+/g, ' ').trim();
-      if (!text) return '';
-      return `[${text}](${href})`;
-    },
-  });
-
-  // GitHub-flavoured tables: first row is the header (Workvivo's editor emits
-  // plain <tr><td> rows, rarely <th>).
-  td.addRule('table', {
-    filter: 'table',
-    replacement: (_content, node) => {
-      const rows = Array.from((node as HTMLElement).querySelectorAll('tr'));
-      const grid = rows.map((tr) =>
-        Array.from(tr.querySelectorAll('th,td')).map((cell) => escapeCell(td.turndown((cell as HTMLElement).innerHTML))),
-      );
-      const width = Math.max(0, ...grid.map((r) => r.length));
-      if (width === 0) return '';
-      const pad = (r: string[]) => [...r, ...Array(width - r.length).fill('')];
-      const line = (r: string[]) => `| ${pad(r).join(' | ')} |`;
-      const [head, ...body] = grid;
-      return `\n\n${line(head!)}\n| ${Array(width).fill('---').join(' | ')} |\n${body.map(line).join('\n')}\n\n`;
-    },
-  });
-  return td;
+/** An image as Markdown: a reference only when it outlives this read (not signed, not inline data). */
+function image(el: RichElement, origin: string): string {
+  const alt = altOf(el);
+  const raw = attr(el.attrs, 'src')?.trim();
+  const src = raw && !isSignedUrl(raw) ? target(raw, origin) : undefined;
+  if (!src || src.startsWith('mailto:')) return alt ? `[image: ${alt}]` : '';
+  return `![${alt}](${mdUrl(src)})`;
 }
 
-/** TinyMCE page/article HTML → Markdown with absolute links. */
+/**
+ * Workvivo's rules on top of `/rich`'s Markdown: links stay `[text](url)` with
+ * in-app paths made absolute (so extractLinks can classify them), and images
+ * keep their reference unless it is a signed (expiring) or inline one, and an
+ * embedded iframe reads as a link to what it embeds.
+ */
+function workvivoElement(origin: string) {
+  return (el: RichElement, output: string, inner: string): string | undefined => {
+    if (output !== 'markdown') return undefined;
+    if (el.tag === 'img') return image(el, origin);
+    // An iframe (an embedded form or video) reads as a link to what it embeds.
+    if (el.tag === 'iframe') {
+      const src = target(attr(el.attrs, 'src')?.trim(), origin);
+      return src ? `\n\n[Embedded content](${mdUrl(src)})\n\n` : '';
+    }
+    if (el.tag !== 'a') return undefined;
+    // A link around a lone image reads as the image's alt text: the link is what matters.
+    const kids = el.children.filter((n) => typeof n !== 'string' || n.trim() !== '');
+    const lone = kids.length === 1 && typeof kids[0] !== 'string' && kids[0]!.tag === 'img' ? kids[0] : undefined;
+    const text = (lone ? altOf(lone) || 'image' : inner).replace(/\s+/g, ' ').trim();
+    const href = target(attr(el.attrs, 'href'), origin);
+    if (!href) return text;
+    return text ? `[${text}](${mdUrl(href)})` : '';
+  };
+}
+
+/** TinyMCE page/article HTML (and converted documents) → Markdown with absolute links. */
 export function htmlToMarkdown(html: string, origin: string): string {
   if (!html.trim()) return '';
-  return tidyMarkdown(buildTurndown(origin).turndown(html));
+  return tidyMarkdown(richMarkdown(html, { element: workvivoElement(origin) }));
 }
 
 /** Rewrite `](/path)` links inside Markdown text to absolute ones. */
