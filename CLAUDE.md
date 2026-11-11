@@ -28,8 +28,10 @@ is behind SAML SSO and its public API needs an admin token.
   carries `_meta.mint` with domain `work`; `tests/mint-hints.test.ts` holds the
   intent table, so a new tool fails it until it declares one. Canonical:
   notifications (whats-new) and events (whats-on); no subject (nothing listable).
-- **Pages → Markdown** (`src/markdown.ts`): TinyMCE HTML via turndown (signed media
-  URLs dropped, links made absolute, GFM tables), Lexical `{blocks}` via a block
+- **Pages → Markdown** (`src/markdown.ts`): TinyMCE HTML via `@chrischall/mcp-utils/rich`
+  with an `element` hook (links kept as `[text](absolute url)` so `extractLinks` sees
+  them, image references kept unless signed or inline `data:`, iframes read as
+  "Embedded content" links), Lexical `{blocks}` via a block
   walker (its text is already Markdown). `extractLinks` classifies every link and
   gives a "View"/"ES" link the heading or document it belongs to.
 - **Documents (`src/download.ts`)**: `/document/link/<id>` 302s to a signed URL on

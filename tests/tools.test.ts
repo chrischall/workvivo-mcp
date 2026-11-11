@@ -81,6 +81,10 @@ describe('news', () => {
     expect(p.body).toMatch(/We shipped/);
     expect(p).not.toHaveProperty('html_content');
   });
+  it('reads an article body as Markdown with body_format', async () => {
+    const { result } = await call({ '/api/articles/7001': fx.article }, 'workvivo_get_article', { article_id: 7001, body_format: 'markdown' });
+    expect(payload(result).body).toBe('## Highlights\n\nWe shipped **three** things.\n\n- One\n- Two');
+  });
 });
 
 describe('posts and comments', () => {

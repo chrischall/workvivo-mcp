@@ -52,7 +52,7 @@ comments, RSVPs or marks anything read.
 |---|---|
 | `workvivo_healthcheck` | Bridge, extension pairing and Workvivo sign-in, end to end |
 | `workvivo_get_feed` | Home feed, a space's feed, or a person's posts |
-| `workvivo_list_news` / `workvivo_get_article` | News articles; one article with its body as text |
+| `workvivo_list_news` / `workvivo_get_article` | News articles; one article with its body as text, or as Markdown with `body_format: "markdown"` |
 | `workvivo_get_post` / `workvivo_list_shoutouts` | A post or shoutout; recent shoutouts |
 | `workvivo_get_comments` | Comments on a post, article, event or shoutout, with names |
 | `workvivo_get_question` | A Q&A question with its answers, votes and the accepted answer |

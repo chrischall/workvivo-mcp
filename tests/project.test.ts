@@ -54,7 +54,7 @@ describe('utcIso / stripTags / itemText', () => {
   });
   it('prefers plain text, then renders HTML', () => {
     expect(itemText({ text: 'plain', html: '<p>x</p>' })).toBe('plain');
-    expect(itemText({ html: '<p>one</p><p>two</p>' })).toMatch(/one\s+two/);
+    expect(itemText({ html: '<p>one</p><p>two</p>' })).toBe('one\n\ntwo');
     expect(itemText({})).toBeUndefined();
   });
 });
@@ -100,9 +100,14 @@ describe('records', () => {
     });
     const d = articleDetail(fx.article);
     expect(d.url).toBe('https://acme.workvivo.us/news/7001');
-    expect(d.body).toMatch(/Highlights[\s\S]*three[\s\S]*One/);
+    expect(d.body).toBe('Highlights\n\nWe shipped three things.\n\n- One\n- Two');
     expect(JSON.stringify(d)).not.toContain('<p>');
     expect(d).not.toHaveProperty('language_variants');
+  });
+
+  it('articleDetail — the body as Markdown when asked, links made absolute', () => {
+    const d = articleDetail({ ...fx.article, html_content: fx.article.html_content + '<p>See <a href="/document/link/9">the guide</a>.</p>' }, { bodyFormat: 'markdown', origin: 'https://acme.workvivo.us' });
+    expect(d.body).toBe('## Highlights\n\nWe shipped **three** things.\n\n- One\n- Two\n\nSee [the guide](https://acme.workvivo.us/document/link/9).');
   });
 
   it('event — UTC times, no meeting secrets in compact', () => {

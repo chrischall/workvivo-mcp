@@ -42,19 +42,23 @@ export function registerNewsTools(server: McpServer, client: WorkvivoClient): vo
       title: 'Read a Workvivo news article',
       description: untrustedDescription(
         'Read one Workvivo news article in full — title, subtitle, author, publish time, spaces and the body ' +
-          'as plain text. Take the id from workvivo_list_news, the feed, or search (`news/<id>`). Its comments: ' +
+          'as plain text, or as Markdown (headings, lists, links) with `body_format: "markdown"`. Take the id from workvivo_list_news, the feed, or search (`news/<id>`). Its comments: ' +
           'workvivo_get_comments with type "article". Read-only.',
       ),
       _meta: LOOKUP,
       annotations: readAnnotations('Read a Workvivo news article'),
       inputSchema: z.object({
         article_id: idArg('article'),
-        view: viewArg('the article\'s metadata and its body as plain text'),
+        body_format: z
+          .enum(['text', 'markdown'])
+          .optional()
+          .describe('How the body comes back: "text" (default) or "markdown" (keeps headings, lists, tables, emphasis and links, made absolute; hidden text dropped).'),
+        view: viewArg('the article\'s metadata and its body (plain text, or Markdown with body_format)'),
       }),
     },
-    async ({ article_id, view }) => {
+    async ({ article_id, body_format, view }) => {
       const data = await client.get(`articles/${article_id}`);
-      return respond(view, data, articleDetail, 'article');
+      return respond(view, data, (a) => articleDetail(a, { bodyFormat: body_format, origin: client.origin }), 'article');
     },
   );
 }
