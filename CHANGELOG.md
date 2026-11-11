@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/chrischall/workvivo-mcp/compare/v0.4.0...v0.5.0) (2026-11-11)
+
+
+### Features
+
+* **news:** read article bodies as Markdown with body_format ([#18](https://github.com/chrischall/workvivo-mcp/issues/18)) ([ecb9842](https://github.com/chrischall/workvivo-mcp/commit/ecb9842f747cb5459747be579f8ad7f7bcc75f3f))
+
+
+### Bug Fixes
+
+* **deps:** Bump the production-dependencies group with 2 updates ([#16](https://github.com/chrischall/workvivo-mcp/issues/16)) ([0a40f09](https://github.com/chrischall/workvivo-mcp/commit/0a40f094f4709f700df89c6821c62b46f3cc2189))
+
 ## [0.4.0](https://github.com/chrischall/workvivo-mcp/compare/v0.3.1...v0.4.0) (2026-11-08)
 
 
