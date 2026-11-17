@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/chrischall/workvivo-mcp/compare/v0.5.0...v0.5.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** Bump the production-dependencies group with 3 updates ([#19](https://github.com/chrischall/workvivo-mcp/issues/19)) ([7cb484b](https://github.com/chrischall/workvivo-mcp/commit/7cb484b1e725d76f396061875032e805fd6c3564))
+
 ## [0.5.0](https://github.com/chrischall/workvivo-mcp/compare/v0.4.0...v0.5.0) (2026-11-11)
 
 
