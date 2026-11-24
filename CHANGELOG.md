@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/chrischall/workvivo-mcp/compare/v0.5.0...v0.5.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **deps:** Bump the production-dependencies group with 3 updates ([#19](https://github.com/chrischall/workvivo-mcp/issues/19)) ([7cb484b](https://github.com/chrischall/workvivo-mcp/commit/7cb484b1e725d76f396061875032e805fd6c3564))
+* **deps:** Bump unpdf from 2.2.0 to 2.2.1 in the production-dependencies group ([#22](https://github.com/chrischall/workvivo-mcp/issues/22)) ([ddbe205](https://github.com/chrischall/workvivo-mcp/commit/ddbe20553e544a1a4fdfab32acd38aabcf1147d9))
+
 ## [0.5.0](https://github.com/chrischall/workvivo-mcp/compare/v0.4.0...v0.5.0) (2026-11-11)
 
 
